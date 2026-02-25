@@ -6,25 +6,59 @@ Linux install -- just bash and `/usr/bin`.
 
 ## Install
 
-Add one line to your `~/.bashrc`:
+### Quick Setup (source from .bashrc)
+
+Clone the repo (or just grab the `bademacs` file) and add one line to
+your `~/.bashrc`:
 
 ```bash
-source /path/to/bademacs
+# Clone it somewhere permanent
+git clone https://github.com/jordanhubbard/bademacs.git ~/bademacs
+
+# Add this line to the end of your ~/.bashrc
+echo 'source ~/bademacs/bademacs' >> ~/.bashrc
 ```
 
-Or use the Makefile:
+Now reload your shell and `bademacs` is available as a command:
 
 ```bash
-make install   # appends source line to ~/.bashrc
+source ~/.bashrc       # reload in current shell, or just open a new terminal
+bademacs myfile.txt    # edit a file
+bademacs               # open a *scratch* buffer
 ```
 
-Then open a new shell (or `source ~/.bashrc`) and run:
+Because `bademacs` is a shell function (not a subprocess), it starts
+instantly -- there is no fork/exec overhead.
+
+### Using the Makefile
+
+If you prefer, the included Makefile copies the script to
+`~/.local/bin/` and appends the source line to `~/.bashrc` for you:
 
 ```bash
-bademacs myfile.txt
+make install           # install and add to .bashrc
+make uninstall         # remove from .bashrc and delete the copy
+make check             # syntax-check the script
 ```
 
-It also works as a standalone script: `./bademacs myfile.txt`
+You can override the install location and target rc file:
+
+```bash
+make install PREFIX=/usr/local/bin BASHRC=~/.bash_profile
+```
+
+### Standalone (no sourcing)
+
+It also works as a plain executable if you just want to run it without
+adding anything to your `.bashrc`:
+
+```bash
+chmod +x bademacs
+./bademacs myfile.txt
+```
+
+In this mode it runs as a script in a subshell rather than a shell
+function, but the behavior is identical.
 
 ## Keybindings
 
