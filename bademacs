@@ -41,16 +41,23 @@ bademacs() {
     local _old_stty _mini CSI=$'\e['
     local -a _lines
     _old_stty=$(stty -g)
-    _rows=$(tput lines); _cols=$(tput cols); _erows=$((_rows - 2))
+    _rows=$(tput lines); _cols=$(tput cols)
+    (( _cols < 1 )) && _cols=1
+    _erows=$((_rows - 2)); (( _erows < 1 )) && _erows=1
 
     _be_cleanup() {
         printf '%s%s' "${CSI}?25h" "${CSI}?1049l"
-        stty "$_old_stty" 2>/dev/null
+        stty "$_old_stty" 2>/dev/null || stty sane 2>/dev/null
     }
 
     _be_load() {
+        local _ln
         _lines=()
         if [[ -f "$_f" ]]; then
+            if [[ ! -r "$_f" ]]; then
+                _msg="Permission denied: $_f"
+                _lines=(""); _mod=0; return
+            fi
             while IFS= read -r _ln || [[ -n "$_ln" ]]; do
                 _lines+=("${_ln%$'\r'}")
             done < "$_f"
@@ -64,11 +71,14 @@ bademacs() {
             _be_write_file; return
         fi
         local _i
-        { for ((_i=0; _i<${#_lines[@]}; _i++)); do
+        if { for ((_i=0; _i<${#_lines[@]}; _i++)); do
             printf '%s\n' "${_lines[$_i]}"
-        done; } > "$_f"
-        _mod=0
-        _msg="Wrote $_f (${#_lines[@]} lines)"
+        done; } > "$_f" 2>/dev/null; then
+            _mod=0
+            _msg="Wrote $_f (${#_lines[@]} lines)"
+        else
+            _msg="Error writing $_f"
+        fi
     }
 
     _be_splice() {
@@ -121,9 +131,10 @@ bademacs() {
         else _pct="$(( _top * 100 / (${#_lines[@]} - _erows) ))%"; fi
         printf -v _st '%-*s' "$_cols" \
             "-${_mi}- bademacs: ${_f}  L$((_cl+1)) C$((_cc+1)) (${_pct})"
+        _st="${_st:0:$_cols}"
         _buf+="${CSI}$((_rows-1));1H${CSI}7m${_st}${CSI}27m"
         _buf+="${CSI}${_rows};1H${CSI}K"
-        [[ -n "$_msg" ]] && _buf+="$_msg"
+        [[ -n "$_msg" ]] && _buf+="${_msg:0:$_cols}"
         _msg=""
         _sc=$((_cc - _left + 1))
         (( _sc < 1 )) && _sc=1
@@ -344,10 +355,20 @@ bademacs() {
         local _prompt="$1" _default="$2" _result="$_default" _ch _ord
         printf '%s%s;1H%sK%s%s' "$CSI" "$_rows" "$CSI" "$_prompt" "$_result"
         while true; do
-            IFS= read -r -s -n1 _ch
+            IFS= read -r -s -n1 _ch || true
+            if (( _resized )); then
+                _resized=0
+                _rows=$(tput lines); _cols=$(tput cols)
+                (( _cols < 1 )) && _cols=1
+                _erows=$((_rows - 2)); (( _erows < 1 )) && _erows=1
+                _be_clamp; printf '%s' "${CSI}2J"; _be_draw
+                printf '%s%s;1H%sK%s%s' "$CSI" "$_rows" "$CSI" "$_prompt" "$_result"
+                continue
+            fi
             printf -v _ord '%d' "'$_ch" 2>/dev/null || _ord=0
             case $_ord in
                 7|27) _msg="Quit"; _mini=""; return 1 ;;
+                0)  [[ -z "$_ch" ]] && { _mini="$_result"; return 0; } ;;
                 13|10) _mini="$_result"; return 0 ;;
                 127|8)
                     [[ -n "$_result" ]] && _result="${_result:0:$((${#_result}-1))}"
@@ -368,11 +389,20 @@ bademacs() {
             printf '%s%s;1H%sK' "$CSI" "$_rows" "$CSI"
             [[ "$_dir" == "fwd" ]] && printf 'I-search: %s' "$_srch" \
                                     || printf 'I-search backward: %s' "$_srch"
-            IFS= read -r -s -n1 _ch
+            IFS= read -r -s -n1 _ch || true
+            if (( _resized )); then
+                _resized=0
+                _rows=$(tput lines); _cols=$(tput cols)
+                (( _cols < 1 )) && _cols=1
+                _erows=$((_rows - 2)); (( _erows < 1 )) && _erows=1
+                _be_clamp; printf '%s' "${CSI}2J"; _be_draw
+                continue
+            fi
             printf -v _ord '%d' "'$_ch" 2>/dev/null || _ord=0
             case $_ord in
                 7)  _cl=$_save_cl; _cc=$_save_cc; _msg="Quit"; return ;;
                 27) return ;;
+                0)  [[ -z "$_ch" ]] && return ;;
                 13|10) return ;;
                 19) _dir="fwd"; (( _cc++ )) ;;
                 18) _dir="bwd" ;;
@@ -480,10 +510,13 @@ bademacs() {
         [[ -z "$_mini" ]] && return
         _f="$_mini"
         local _i
-        { for ((_i=0; _i<${#_lines[@]}; _i++)); do
+        if { for ((_i=0; _i<${#_lines[@]}; _i++)); do
             printf '%s\n' "${_lines[$_i]}"
-        done; } > "$_f"
-        _mod=0; _msg="Wrote $_f (${#_lines[@]} lines)"
+        done; } > "$_f" 2>/dev/null; then
+            _mod=0; _msg="Wrote $_f (${#_lines[@]} lines)"
+        else
+            _msg="Error writing $_f"
+        fi
     }
 
     _be_insert_file() {
@@ -567,7 +600,7 @@ bademacs() {
     trap '_resized=1' WINCH
 
     printf '%s%s' "${CSI}?1049h" "${CSI}2J${CSI}H"
-    stty -echo -icanon -isig
+    stty -echo -icanon -isig -ixon -icrnl
     _be_load; _be_clamp; _be_draw
 
     # --- Main loop ---
@@ -576,11 +609,14 @@ bademacs() {
     while (( _running )); do
         if (( _resized )); then
             _resized=0
-            _rows=$(tput lines); _cols=$(tput cols); _erows=$((_rows - 2))
+            _rows=$(tput lines); _cols=$(tput cols)
+            (( _cols < 1 )) && _cols=1
+            _erows=$((_rows - 2)); (( _erows < 1 )) && _erows=1
             _be_clamp; printf '%s' "${CSI}2J"; _be_draw
         fi
 
-        IFS= read -r -s -n1 _ch
+        IFS= read -r -s -n1 _ch || true
+        if (( _resized )); then continue; fi
         printf -v _ord '%d' "'$_ch" 2>/dev/null || _ord=0
 
         # --- Escape sequences ---
@@ -717,8 +753,10 @@ bademacs() {
             25) _be_yank ;;
             26) _be_cleanup; kill -TSTP $$
                 printf '%s%s' "${CSI}?1049h" "${CSI}2J"
-                stty -echo -icanon -isig
-                _rows=$(tput lines); _cols=$(tput cols); _erows=$((_rows - 2)) ;;
+                stty -echo -icanon -isig -ixon -icrnl
+                _rows=$(tput lines); _cols=$(tput cols)
+                (( _cols < 1 )) && _cols=1
+                _erows=$((_rows - 2)); (( _erows < 1 )) && _erows=1 ;;
             *) (( _ord >= 32 )) && _be_insert_char "$_ch" ;;
         esac
 
