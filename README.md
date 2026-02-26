@@ -1,6 +1,6 @@
 # em
 
-A micro GNU Emacs (mg) compatible text editor implemented as a single bash
+A bad emacs clone (mg-compatible) implemented as a single bash
 shell function. No compiled languages, no dependencies beyond a standard
 Linux install -- just bash and `/usr/bin`.
 

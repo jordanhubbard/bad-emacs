@@ -1,4 +1,4 @@
-# em - A micro GNU Emacs (mg) compatible editor as a single shell function
+# em - A bad emacs clone (mg-compatible) as a single shell function
 #
 # Source this file in your .bashrc:  source /path/to/em
 # Then run:  em [filename]
@@ -33,6 +33,11 @@
 #   C-h b      describe bindings
 
 em() {
+    # Disable errexit — arithmetic expressions like ((0)) return status 1
+    # which kills the shell under set -e. Save and restore on exit.
+    local _em_had_errexit=""
+    [[ "$-" == *e* ]] && { _em_had_errexit=1; set +e; }
+
     # ===== LOCAL STATE =====
     local -a _em_lines=()
     local -i _em_cy=0 _em_cx=0
@@ -78,9 +83,9 @@ em() {
         _em_cleaned_up=1
         # Use hardcoded ESC byte so cleanup works even outside em() scope
         printf '%s' $'\x1b[?25h\x1b[?1049l'
-        [[ -n "$_em_stty_saved" ]] && stty "$_em_stty_saved" 2>/dev/null
+        stty "$_em_stty_saved" 2>/dev/null || stty sane 2>/dev/null
         # Restore original traps before unsetting functions
-        trap - EXIT INT TERM HUP WINCH
+        trap - INT TERM HUP WINCH
         [[ -n "$_em_saved_traps" ]] && eval "$_em_saved_traps"
         local fn
         while IFS= read -r fn; do
@@ -97,9 +102,9 @@ em() {
 
     _em_init() {
         _em_stty_saved=$(stty -g 2>/dev/null)
-        _em_saved_traps=$(trap -p EXIT INT TERM HUP WINCH 2>/dev/null)
+        _em_saved_traps=$(trap -p INT TERM HUP WINCH 2>/dev/null)
         stty raw -echo -isig -ixon -ixoff lnext undef 2>/dev/null
-        trap '_em_cleanup' EXIT
+        # No EXIT trap — dangerous for shell functions (lingers after return)
         trap '_em_cleanup; return 130' INT
         trap '_em_cleanup; return 143' TERM
         trap '_em_cleanup; return 129' HUP
@@ -112,7 +117,7 @@ em() {
         else
             _em_new_buffer "*scratch*" ""
         fi
-        _em_message="em: micro-emacs (C-x C-c to quit, C-h b for help)"
+        _em_message="em: bad emacs (C-x C-c to quit, C-h b for help)"
     }
 
     _em_load_file() {
@@ -1897,6 +1902,23 @@ em() {
         esac
     }
 
+    _em_read_meta_key() {
+        _em_message="ESC-"
+        _em_render
+        _em_read_key
+        # Translate the next key into its Meta equivalent
+        case "$_em_key" in
+            SELF:*) _em_key="M-${_em_key#SELF:}";;
+            C-*)    _em_key="M-${_em_key}";;  # ESC C-x etc.
+            *)      _em_key="M-${_em_key}";;
+        esac
+        # Record for macros
+        if ((_em_recording)); then
+            _em_macro_keys+=("ESC" "$_em_key")
+        fi
+        _em_dispatch
+    }
+
     _em_read_cx_key() {
         _em_message="C-x-"
         _em_render
@@ -1927,11 +1949,12 @@ em() {
 
     _em_dispatch() {
         # Record macro keys (skip C-x, it's handled in _em_read_cx_key)
-        if ((_em_recording)) && [[ "$_em_key" != "C-x" ]]; then
+        if ((_em_recording)) && [[ "$_em_key" != "C-x" && "$_em_key" != "ESC" ]]; then
             _em_macro_keys+=("$_em_key")
         fi
         case "$_em_key" in
             "C-x")    _em_read_cx_key;;
+            "ESC")    _em_read_meta_key;;
             "C-f"|"RIGHT")  _em_forward_char;;
             "C-b"|"LEFT")   _em_backward_char;;
             "C-n"|"DOWN")   _em_next_line;;
@@ -1991,4 +2014,6 @@ em() {
     done
 
     _em_cleanup
+    [[ -n "$_em_had_errexit" ]] && set -e
+    return 0
 }
