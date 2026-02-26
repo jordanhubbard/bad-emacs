@@ -62,6 +62,7 @@ em() {
     local ESC=$'\x1b'
     local -i _em_tab_width=8
     local -i _em_cleaned_up=0
+    local _em_saved_traps=""
     local -i _em_fill_column=72
     local -i _em_recording=0
     local -a _em_macro_keys=()
@@ -75,9 +76,11 @@ em() {
     _em_cleanup() {
         ((_em_cleaned_up)) && return
         _em_cleaned_up=1
-        printf '\033[?25h'
-        printf '\033[?1049l'
+        printf '%s' "${ESC}[?25h${ESC}[?1049l"
         [[ -n "$_em_stty_saved" ]] && stty "$_em_stty_saved" 2>/dev/null
+        # Restore original traps before unsetting functions
+        trap - EXIT INT TERM HUP WINCH
+        [[ -n "$_em_saved_traps" ]] && eval "$_em_saved_traps"
         local fn
         while IFS= read -r fn; do
             unset -f "$fn" 2>/dev/null
@@ -93,14 +96,14 @@ em() {
 
     _em_init() {
         _em_stty_saved=$(stty -g 2>/dev/null)
+        _em_saved_traps=$(trap -p EXIT INT TERM HUP WINCH 2>/dev/null)
         stty raw -echo -isig -ixon -ixoff 2>/dev/null
         trap '_em_cleanup' EXIT
-        trap '_em_cleanup; exit 130' INT
-        trap '_em_cleanup; exit 143' TERM
-        trap '_em_cleanup; exit 129' HUP
+        trap '_em_cleanup; return 130' INT
+        trap '_em_cleanup; return 143' TERM
+        trap '_em_cleanup; return 129' HUP
         trap '_em_handle_resize' WINCH
-        printf '\033[?1049h'
-        printf '\033[?25h'
+        printf '%s' "${ESC}[?1049h${ESC}[?25h"
         _em_handle_resize
         if [[ -n "$1" ]]; then
             _em_new_buffer "$(basename "$1")" "$1"
@@ -221,7 +224,7 @@ em() {
         local -i visible_rows=$((_em_rows - 2))
         local -i i screen_row
 
-        output+='\033[?25l'
+        output+="${ESC}[?25l"
 
         # Compute region bounds for highlighting
         local -i reg_active=0 reg_sy=-1 reg_sx=-1 reg_ey=-1 reg_ex=-1
@@ -237,7 +240,7 @@ em() {
 
         for ((screen_row = 1; screen_row <= visible_rows; screen_row++)); do
             i=$((_em_top + screen_row - 1))
-            output+="\033[${screen_row};1H"
+            output+="${ESC}[${screen_row};1H"
             if ((i < ${#_em_lines[@]})); then
                 local line="${_em_lines[i]}"
                 _em_expand_tabs "$line"
@@ -259,7 +262,7 @@ em() {
                     ((hs > ${#display})) && hs=${#display}
                     ((he > ${#display})) && he=${#display}
                     if ((hs < he)); then
-                        output+="${display:0:hs}\033[7m${display:hs:he-hs}\033[0m${display:he}"
+                        output+="${display:0:hs}${ESC}[7m${display:hs:he-hs}${ESC}[0m${display:he}"
                     else
                         output+="$display"
                     fi
@@ -267,7 +270,7 @@ em() {
                     output+="$display"
                 fi
             fi
-            output+='\033[K'
+            output+="${ESC}[K"
         done
 
         # Status line
@@ -294,11 +297,11 @@ em() {
             ((slen++))
         done
         status="${status:0:_em_cols}"
-        output+="\033[${status_row};1H\033[7m${status}\033[0m"
+        output+="${ESC}[${status_row};1H${ESC}[7m${status}${ESC}[0m"
 
         # Message line
         local -i msg_row=$_em_rows
-        output+="\033[${msg_row};1H\033[K"
+        output+="${ESC}[${msg_row};1H${ESC}[K"
         if [[ -n "$_em_message" ]]; then
             output+="${_em_message:0:_em_cols}"
             if ((!_em_msg_persist)); then
@@ -310,10 +313,10 @@ em() {
         local -i screen_cy=$((_em_cy - _em_top + 1))
         _em_col_to_display "${_em_lines[_em_cy]}" "$_em_cx"
         local -i screen_cx=$((_em_display_col + 1))
-        output+="\033[${screen_cy};${screen_cx}H"
-        output+='\033[?25h'
+        output+="${ESC}[${screen_cy};${screen_cx}H"
+        output+="${ESC}[?25h"
 
-        printf '%b' "$output"
+        printf '%s' "$output"
     }
 
     _em_read_key() {
@@ -801,8 +804,8 @@ em() {
             else
                 prompt="I-search backward: ${search}"
             fi
-            printf '\033[%d;1H\033[K%s' "$_em_rows" "${prompt:0:_em_cols}"
-            printf '\033[%d;%dH' "$_em_rows" "$((${#prompt} + 1))"
+            printf '%s' "${ESC}[${_em_rows};1H${ESC}[K${prompt:0:_em_cols}"
+            printf '%s' "${ESC}[${_em_rows};$((${#prompt} + 1))H"
 
             _em_read_key
             case "$_em_key" in
@@ -930,9 +933,9 @@ em() {
 
         while ((mb_running)); do
             local display="${prompt}${input}"
-            printf '\033[%d;1H\033[K%s' "$_em_rows" "${display:0:_em_cols}"
+            printf '%s' "${ESC}[${_em_rows};1H${ESC}[K${display:0:_em_cols}"
             local -i cpos=$((${#prompt} + cursor + 1))
-            printf '\033[%d;%dH' "$_em_rows" "$cpos"
+            printf '%s' "${ESC}[${_em_rows};${cpos}H"
 
             _em_read_key
             case "$_em_key" in
@@ -1549,8 +1552,7 @@ em() {
         while _em_isearch_next "$from" 1 "$_em_cy" "$_em_cx"; do
             _em_ensure_visible
             _em_render
-            printf '\033[%d;1H\033[KQuery replacing %s with %s: (y/n/!/q/.) ' \
-                "$_em_rows" "$from" "$to"
+            printf '%s' "${ESC}[${_em_rows};1H${ESC}[KQuery replacing ${from} with ${to}: (y/n/!/q/.) "
             _em_read_key
             case "$_em_key" in
                 "SELF:y"|"C-m")
