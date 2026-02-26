@@ -346,8 +346,13 @@ em() {
         if ((ord == 27)); then
             IFS= read -rsn1 -t 0.05 char2
             if [[ -z "$char2" ]]; then
-                _em_key="ESC"
-                return
+                # Bare ESC — block for next key and treat as Meta prefix
+                IFS= read -rsn1 char2
+                if [[ -z "$char2" ]]; then
+                    _em_key="C-SPC"  # ESC then NUL = set mark
+                    return
+                fi
+                # Fall through to process char2 as Meta key
             fi
             if [[ "$char2" == "[" ]]; then
                 IFS= read -rsn1 -t 0.05 char3
@@ -717,6 +722,11 @@ em() {
         if ((sy > ey || (sy == ey && sx > ex))); then
             local -i t; t=$sy; sy=$ey; ey=$t; t=$sx; sx=$ex; ex=$t
         fi
+        # Push undo for each affected line
+        local -i j
+        for ((j = sy; j <= ey; j++)); do
+            _em_undo_push "replace_line" "$j" "0" "${_em_lines[j]}"
+        done
         local killed=""
         if ((sy == ey)); then
             killed="${_em_lines[sy]:sx:ex-sx}"
@@ -1191,7 +1201,6 @@ em() {
         _em_modified=0; _em_goal_col=-1
         _em_lines=("")
         _em_undo=()
-        return $bid
     }
 
     _em_find_buf_by_filename() {
@@ -1287,11 +1296,6 @@ em() {
     }
 
     _em_list_buffers() {
-        local -a saved_lines=("${_em_lines[@]}")
-        local -i saved_cy=$_em_cy saved_cx=$_em_cx saved_top=$_em_top
-        local -i saved_mod=$_em_modified
-        local saved_name="$_em_bufname" saved_file="$_em_filename"
-        # Save current buffer state first
         _em_save_buffer_state
         _em_lines=()
         local header
@@ -1636,6 +1640,33 @@ em() {
                     _em_fill_column=$_em_mb_result
                     _em_message="Fill column set to $_em_fill_column"
                 fi
+                ;;
+            query-replace)
+                _em_query_replace
+                ;;
+            save-buffer)
+                _em_save_buffer
+                ;;
+            find-file)
+                _em_find_file
+                ;;
+            write-file)
+                _em_write_file
+                ;;
+            insert-file)
+                _em_insert_file
+                ;;
+            kill-buffer)
+                _em_kill_buffer
+                ;;
+            switch-to-buffer)
+                _em_switch_buffer
+                ;;
+            list-buffers)
+                _em_list_buffers
+                ;;
+            save-buffers-kill-emacs)
+                _em_quit
                 ;;
             describe-bindings|help)
                 _em_show_bindings
