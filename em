@@ -64,7 +64,10 @@ em() {
     local _em_found_pos=0
     local _em_found_buf=0
     local US=$'\x1f'
+    local RS=$'\x1e'
+    local GS=$'\x1d'
     local ESC=$'\x1b'
+    local _em_abc="abcdefghijklmnopqrstuvwxyz"
     local -i _em_tab_width=8
     local -i _em_cleaned_up=0
     local _em_saved_traps=""
@@ -96,8 +99,12 @@ em() {
     }
 
     _em_handle_resize() {
-        _em_rows=$(tput lines 2>/dev/null) || _em_rows=${LINES:-24}
-        _em_cols=$(tput cols 2>/dev/null) || _em_cols=${COLUMNS:-80}
+        if [[ -n "$LINES" && -n "$COLUMNS" ]]; then
+            _em_rows=$LINES; _em_cols=$COLUMNS
+        else
+            _em_rows=$(tput lines 2>/dev/null) || _em_rows=24
+            _em_cols=$(tput cols 2>/dev/null) || _em_cols=80
+        fi
     }
 
     _em_init() {
@@ -121,7 +128,7 @@ em() {
     }
 
     _em_load_file() {
-        local file="$1"
+        local file="$1" line
         _em_lines=()
         if [[ -f "$file" ]]; then
             while IFS= read -r line || [[ -n "$line" ]]; do
@@ -185,6 +192,20 @@ em() {
             replace_line)
                 _em_lines[arg1]="$arg3"
                 _em_cy=$arg1; _em_cx=$arg2
+                ;;
+            replace_region)
+                # arg1=start, arg2=new_count, arg3=packed (cy RS cx RS line0 RS line1 ...)
+                local packed="$arg3"
+                local -a rr_parts=()
+                while [[ "$packed" == *"${RS}"* ]]; do
+                    rr_parts+=("${packed%%"${RS}"*}")
+                    packed="${packed#*"${RS}"}"
+                done
+                rr_parts+=("$packed")
+                local -i rr_cy=${rr_parts[0]} rr_cx=${rr_parts[1]}
+                local -a orig_lines=("${rr_parts[@]:2}")
+                _em_lines=("${_em_lines[@]:0:arg1}" "${orig_lines[@]}" "${_em_lines[@]:arg1+arg2}")
+                _em_cy=$rr_cy; _em_cx=$rr_cx
                 ;;
         esac
         _em_modified=1
@@ -334,25 +355,25 @@ em() {
 
         if [[ -z "$char" ]]; then
             if ((rc != 0)); then
-                _em_key="C-SPC"
+                # EOF or error (disconnected terminal) — stop the editor
+                _em_running=0
+                _em_key="UNKNOWN"
                 return
             fi
+            # NUL byte — Ctrl-Space
             _em_key="C-SPC"
             return
         fi
 
-        ord=$(printf '%d' "'$char" 2>/dev/null) || ord=0
+        printf -v ord '%d' "'$char" 2>/dev/null || ord=0
 
         if ((ord == 27)); then
             IFS= read -rsn1 -t 0.05 char2
             if [[ -z "$char2" ]]; then
-                # Bare ESC — block for next key and treat as Meta prefix
-                IFS= read -rsn1 char2
-                if [[ -z "$char2" ]]; then
-                    _em_key="C-SPC"  # ESC then NUL = set mark
-                    return
-                fi
-                # Fall through to process char2 as Meta key
+                # Bare ESC — return to dispatch, which routes to _em_read_meta_key
+                # (shows "ESC-" feedback, reads next key, translates to M-*)
+                _em_key="ESC"
+                return
             fi
             if [[ "$char2" == "[" ]]; then
                 IFS= read -rsn1 -t 0.05 char3
@@ -392,7 +413,7 @@ em() {
                 return
             else
                 local -i ord2
-                ord2=$(printf '%d' "'$char2" 2>/dev/null) || ord2=0
+                printf -v ord2 '%d' "'$char2" 2>/dev/null || ord2=0
                 if ((ord2 == 127 || ord2 == 8)); then
                     _em_key="M-DEL"
                 else
@@ -401,9 +422,7 @@ em() {
                 return
             fi
         elif ((ord >= 1 && ord <= 26)); then
-            local -i letter_ord=$((ord + 96))
-            local letter
-            printf -v letter "\\$(printf '%03o' "$letter_ord")"
+            local letter="${_em_abc:ord-1:1}"
             _em_key="C-${letter}"
             return
         elif ((ord == 127 || ord == 8)); then
@@ -644,10 +663,12 @@ em() {
             return
         fi
         local text="${_em_kill_ring[0]}"
+        # Save state for undo
+        local -i save_cy=$_em_cy save_cx=$_em_cx
+        local save_line="${_em_lines[_em_cy]}"
         _em_mark_y=$_em_cy
         _em_mark_x=$_em_cx
         # Insert text which may contain newlines
-        local IFS_save="$IFS"
         local -a parts=()
         local tmp="$text"
         while [[ "$tmp" == *$'\n'* ]]; do
@@ -659,6 +680,7 @@ em() {
             local line="${_em_lines[_em_cy]}"
             _em_lines[_em_cy]="${line:0:_em_cx}${parts[0]}${line:_em_cx}"
             ((_em_cx += ${#parts[0]}))
+            _em_undo_push "replace_region" "$save_cy" "1" "${save_cy}${RS}${save_cx}${RS}${save_line}"
         else
             local line="${_em_lines[_em_cy]}"
             local before="${line:0:_em_cx}"
@@ -675,6 +697,7 @@ em() {
             _em_lines=("${_em_lines[@]:0:insert_at}" "${new_lines[@]}" "${_em_lines[@]:insert_at}")
             _em_cy=$((_em_cy + ${#parts[@]} - 1))
             _em_cx=${#last_part}
+            _em_undo_push "replace_region" "$save_cy" "${#parts[@]}" "${save_cy}${RS}${save_cx}${RS}${save_line}"
         fi
         _em_modified=1
         _em_goal_col=-1
@@ -722,10 +745,11 @@ em() {
         if ((sy > ey || (sy == ey && sx > ex))); then
             local -i t; t=$sy; sy=$ey; ey=$t; t=$sx; sx=$ex; ex=$t
         fi
-        # Push undo for each affected line
+        # Save original lines for undo before modifying
+        local packed="${_em_cy}${RS}${_em_cx}"
         local -i j
         for ((j = sy; j <= ey; j++)); do
-            _em_undo_push "replace_line" "$j" "0" "${_em_lines[j]}"
+            packed+="${RS}${_em_lines[j]}"
         done
         local killed=""
         if ((sy == ey)); then
@@ -734,7 +758,6 @@ em() {
             _em_lines[sy]="${line:0:sx}${line:ex}"
         else
             killed="${_em_lines[sy]:sx}"
-            local -i j
             for ((j = sy + 1; j < ey; j++)); do
                 killed+=$'\n'"${_em_lines[j]}"
             done
@@ -747,6 +770,8 @@ em() {
                 _em_lines=("${_em_lines[@]:0:del_start}" "${_em_lines[@]:ey+1}")
             fi
         fi
+        # After kill, 1 line at sy holds the merged result
+        _em_undo_push "replace_region" "$sy" "1" "$packed"
         _em_kill_ring=("$killed" "${_em_kill_ring[@]}")
         (( ${#_em_kill_ring[@]} > 60 )) && _em_kill_ring=("${_em_kill_ring[@]:0:60}")
         _em_cy=$sy
@@ -801,13 +826,12 @@ em() {
             return 0
         fi
         local sub="${haystack:start}"
-        case "$sub" in
-            *"$needle"*)
-                local prefix="${sub%%"$needle"*}"
-                _em_found_pos=$((start + ${#prefix}))
-                return 0
-                ;;
-        esac
+        # Use [[ ]] — quoted $needle is treated as literal, unlike case patterns
+        if [[ "$sub" == *"$needle"* ]]; then
+            local prefix="${sub%%"$needle"*}"
+            _em_found_pos=$((start + ${#prefix}))
+            return 0
+        fi
         return 1
     }
 
@@ -1079,10 +1103,14 @@ em() {
             return
         fi
         local -a flines=()
+        local line
         while IFS= read -r line || [[ -n "$line" ]]; do
             flines+=("$line")
         done < "$path"
         [[ ${#flines[@]} -eq 0 ]] && return
+        # Save state for undo
+        local -i save_cy=$_em_cy save_cx=$_em_cx
+        local save_line="${_em_lines[_em_cy]}"
         # Insert at cursor position
         local cur_line="${_em_lines[_em_cy]}"
         local before="${cur_line:0:_em_cx}"
@@ -1090,6 +1118,7 @@ em() {
         if [[ ${#flines[@]} -eq 1 ]]; then
             _em_lines[_em_cy]="${before}${flines[0]}${after}"
             ((_em_cx += ${#flines[0]}))
+            _em_undo_push "replace_region" "$save_cy" "1" "${save_cy}${RS}${save_cx}${RS}${save_line}"
         else
             _em_lines[_em_cy]="${before}${flines[0]}"
             local -i insert_at=$((_em_cy + 1))
@@ -1103,6 +1132,7 @@ em() {
             _em_lines=("${_em_lines[@]:0:insert_at}" "${mid[@]}" "${_em_lines[@]:insert_at}")
             _em_cy=$((_em_cy + ${#flines[@]} - 1))
             _em_cx=${#flines[-1]}
+            _em_undo_push "replace_region" "$save_cy" "${#flines[@]}" "${save_cy}${RS}${save_cx}${RS}${save_line}"
         fi
         _em_modified=1
         _em_message="Inserted file: $(basename "$path")"
@@ -1134,11 +1164,10 @@ em() {
         for ((i = 0; i < nlines; i++)); do
             _em_bufs["${bid}_line_${i}"]="${_em_lines[i]}"
         done
-        # Serialize undo stack
-        local RS=$'\x1e'
-        local undo_str=""
+        # Serialize undo stack (GS separates records; RS is used within replace_region)
+        local undo_str="" record
         for record in "${_em_undo[@]}"; do
-            [[ -n "$undo_str" ]] && undo_str+="$RS"
+            [[ -n "$undo_str" ]] && undo_str+="$GS"
             undo_str+="$record"
         done
         _em_bufs["${bid}_undo"]="$undo_str"
@@ -1163,14 +1192,13 @@ em() {
             _em_lines+=("${_em_bufs["${bid}_line_${i}"]}")
         done
         [[ ${#_em_lines[@]} -eq 0 ]] && _em_lines=("")
-        # Restore undo stack
+        # Restore undo stack (GS separates records)
         _em_undo=()
-        local RS=$'\x1e'
-        local undo_str="${_em_bufs["${bid}_undo"]}"
+        local undo_str="${_em_bufs["${bid}_undo"]}" record
         if [[ -n "$undo_str" ]]; then
-            while IFS= read -r -d "$RS" record; do
+            while IFS= read -r -d "$GS" record; do
                 _em_undo+=("$record")
-            done <<< "${undo_str}${RS}"
+            done <<< "${undo_str}${GS}"
         fi
     }
 
@@ -1376,7 +1404,7 @@ em() {
         if ((_em_cx < ${#line})); then
             local ch="${line:_em_cx:1}"
             local -i ord
-            ord=$(printf '%d' "'$ch" 2>/dev/null) || ord=0
+            printf -v ord '%d' "'$ch" 2>/dev/null || ord=0
             printf -v ch_info "Char: %s (%d, #o%o, #x%x)" "$ch" "$ord" "$ord" "$ord"
         else
             ch_info="Char: EOL"
@@ -1880,12 +1908,14 @@ em() {
         done
         [[ -n "$text" ]] && new_lines+=("$text")
         [[ ${#new_lines[@]} -eq 0 ]] && new_lines=("")
-        # Push undo for each original line
+        # Push undo for original region
+        local packed="${_em_cy}${RS}${_em_cx}"
         for ((i = start; i <= end; i++)); do
-            _em_undo_push "replace_line" "$i" "0" "${_em_lines[i]}"
+            packed+="${RS}${_em_lines[i]}"
         done
         # Replace lines
         _em_lines=("${_em_lines[@]:0:start}" "${new_lines[@]}" "${_em_lines[@]:end+1}")
+        _em_undo_push "replace_region" "$start" "${#new_lines[@]}" "$packed"
         _em_cy=$start
         _em_cx=0
         _em_modified=1
