@@ -84,8 +84,8 @@ em() {
     _em_cleanup() {
         ((_em_cleaned_up)) && return
         _em_cleaned_up=1
-        # Use hardcoded ESC byte so cleanup works even outside em() scope
-        printf '%s' $'\x1b[?25h\x1b[?1049l'
+        # Reset attributes, show cursor, exit alternate screen
+        printf '%s' $'\x1b[0m\x1b[?25h\x1b[?1049l'
         stty "$_em_stty_saved" 2>/dev/null || stty sane 2>/dev/null
         # Restore original traps before unsetting functions
         trap - INT TERM HUP WINCH
@@ -110,7 +110,7 @@ em() {
     _em_init() {
         _em_stty_saved=$(stty -g 2>/dev/null)
         _em_saved_traps=$(trap -p INT TERM HUP WINCH 2>/dev/null)
-        stty raw -echo -isig -ixon -ixoff lnext undef 2>/dev/null
+        stty raw -echo -isig -ixon -ixoff -icrnl lnext undef 2>/dev/null
         # No EXIT trap — dangerous for shell functions (lingers after return)
         trap '_em_cleanup; return 130' INT
         trap '_em_cleanup; return 143' TERM
@@ -350,7 +350,7 @@ em() {
         local char="" char2="" char3="" char4=""
         local -i rc ord
 
-        IFS= read -rsn1 char
+        IFS= read -rsn1 -d '' char
         rc=$?
 
         if [[ -z "$char" ]]; then
@@ -368,7 +368,7 @@ em() {
         printf -v ord '%d' "'$char" 2>/dev/null || ord=0
 
         if ((ord == 27)); then
-            IFS= read -rsn1 -t 0.05 char2
+            IFS= read -rsn1 -d '' -t 0.05 char2
             if [[ -z "$char2" ]]; then
                 # Bare ESC — return to dispatch, which routes to _em_read_meta_key
                 # (shows "ESC-" feedback, reads next key, translates to M-*)
@@ -376,7 +376,7 @@ em() {
                 return
             fi
             if [[ "$char2" == "[" ]]; then
-                IFS= read -rsn1 -t 0.05 char3
+                IFS= read -rsn1 -d '' -t 0.05 char3
                 case "$char3" in
                     A) _em_key="UP"; return;;
                     B) _em_key="DOWN"; return;;
@@ -386,7 +386,7 @@ em() {
                     F) _em_key="END"; return;;
                     [0-9])
                         local seq="$char3"
-                        while IFS= read -rsn1 -t 0.05 char4; do
+                        while IFS= read -rsn1 -d '' -t 0.05 char4; do
                             seq+="$char4"
                             [[ "$char4" == "~" || "$char4" == [A-Za-z] ]] && break
                         done
@@ -403,7 +403,7 @@ em() {
                     *) _em_key="UNKNOWN"; return;;
                 esac
             elif [[ "$char2" == "O" ]]; then
-                IFS= read -rsn1 -t 0.05 char3
+                IFS= read -rsn1 -d '' -t 0.05 char3
                 case "$char3" in
                     A) _em_key="UP";; B) _em_key="DOWN";;
                     C) _em_key="RIGHT";; D) _em_key="LEFT";;
