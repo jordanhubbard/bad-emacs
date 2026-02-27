@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  syntax-check:
+    name: Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check bash version
+        run: bash --version | head -1
+
+      - name: Check zsh version
+        run: zsh --version
+
+      - name: Syntax check bash version
+        run: bash -n em
+
+      - name: Syntax check zsh version
+        run: zsh -n em.zsh
+
+  test-bash:
+    name: Bash Integration Tests
+    runs-on: ubuntu-latest
+    needs: syntax-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install expect
+        run: sudo apt-get update && sudo apt-get install -y expect
+
+      - name: Check bash version
+        run: bash --version | head -1
+
+      - name: "Test: start and quit"
+        run: expect tests/test_bash_start_quit.exp
+
+      - name: "Test: open file"
+        run: expect tests/test_bash_open_file.exp
+
+      - name: "Test: save file"
+        run: expect tests/test_bash_save_file.exp
+
+      - name: "Test: upcase word (M-u)"
+        run: expect tests/test_bash_upcase.exp
+
+  test-zsh:
+    name: Zsh Integration Tests
+    runs-on: ubuntu-latest
+    needs: syntax-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install expect and zsh
+        run: sudo apt-get update && sudo apt-get install -y expect zsh
+
+      - name: Check zsh version
+        run: zsh --version
+
+      - name: "Test: start and quit"
+        run: expect tests/test_zsh_start_quit.exp
+
+      - name: "Test: open file"
+        run: expect tests/test_zsh_open_file.exp
+
+      - name: "Test: save file"
+        run: expect tests/test_zsh_save_file.exp
+
+      - name: "Test: upcase word (M-u)"
+        run: expect tests/test_zsh_upcase.exp
+
+  test-macos:
+    name: macOS Smoke Test
+    runs-on: macos-latest
+    needs: syntax-check
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check bash version
+        run: bash --version | head -1
+
+      - name: Check zsh version
+        run: zsh --version
+
+      - name: Syntax check both versions
+        run: make check
+
+      - name: "Bash: start and quit"
+        run: expect tests/test_bash_start_quit.exp
+
+      - name: "Zsh: start and quit"
+        run: expect tests/test_zsh_start_quit.exp

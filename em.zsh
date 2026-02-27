@@ -318,8 +318,8 @@ em() {
             fi
         fi
         local sline
-        printf -v sline '-UUU:%s%s  %-20s  (Fundamental) L%-6d %s' \
-            "$mod_flag" "-" "$_em_bufname" "$((_em_cy + 1))" "$pct"
+        printf -v sline '%s%s%s  %-20s  (Fundamental) L%-6d %s' \
+            "-UUU:" "$mod_flag" "-" "$_em_bufname" "$((_em_cy + 1))" "$pct"
         local -i slen=${#sline}
         while ((slen < _em_cols)); do
             sline+="-"
@@ -354,6 +354,12 @@ em() {
 
         IFS= read -rk1 char
         rc=$?
+
+        # Retry once on transient error (EAGAIN on some systems/PTYs)
+        if ((rc != 0)) && [[ -z "$char" ]]; then
+            IFS= read -rk1 char
+            rc=$?
+        fi
 
         if [[ -z "$char" ]]; then
             if ((rc != 0)); then

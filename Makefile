@@ -14,7 +14,7 @@ endif
 
 SHELL := /bin/bash
 
-.PHONY: install uninstall check
+.PHONY: install uninstall check test
 
 install:
 	@echo "Detected shell: $(SHELL_TYPE) (override with SHELL_TYPE=bash|zsh)"
@@ -40,3 +40,6 @@ check:
 	@bash -n em && echo "  em: Syntax OK"
 	@echo "Checking zsh version..."
 	@zsh -n em.zsh && echo "  em.zsh: Syntax OK"
+
+test: check
+	@./tests/run_tests.sh
