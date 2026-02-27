@@ -168,19 +168,19 @@ em() {
         case "$type" in
             insert_char)
                 local line="${_em_lines[arg1]}"
-                _em_lines[arg1]="${line:0:arg2}${arg3}${line:arg2}"
+                _em_lines[arg1]="${line:0: arg2}${arg3}${line: arg2}"
                 _em_cy=$arg1; _em_cx=$arg2
                 ;;
             delete_char)
                 local line="${_em_lines[arg1]}"
-                _em_lines[arg1]="${line:0:arg2}${line:arg2+1}"
+                _em_lines[arg1]="${line:0: arg2}${line: arg2+1}"
                 _em_cy=$arg1; _em_cx=$arg2
                 ;;
             join_lines)
                 local line="${_em_lines[arg1]}"
-                _em_lines[arg1]="${line:0:arg2}"
+                _em_lines[arg1]="${line:0: arg2}"
                 local -i ins=$((arg1 + 1))
-                _em_lines=("${_em_lines[@]:0:ins}" "${line:arg2}" "${_em_lines[@]:ins}")
+                _em_lines=("${_em_lines[@]:0: ins}" "${line: arg2}" "${_em_lines[@]: ins}")
                 _em_cy=$arg1; _em_cx=$arg2
                 ;;
             split_line)
@@ -188,7 +188,7 @@ em() {
                 local next="${_em_lines[arg1+1]}"
                 _em_lines[arg1]="${line}${next}"
                 local -i del=$((arg1 + 1))
-                _em_lines=("${_em_lines[@]:0:del}" "${_em_lines[@]:del+1}")
+                _em_lines=("${_em_lines[@]:0: del}" "${_em_lines[@]: del+1}")
                 _em_cy=$arg1; _em_cx=$arg2
                 ;;
             replace_line)
@@ -206,7 +206,7 @@ em() {
                 rr_parts+=("$packed")
                 local -i rr_cy=${rr_parts[0]} rr_cx=${rr_parts[1]}
                 local -a orig_lines=("${rr_parts[@]:2}")
-                _em_lines=("${_em_lines[@]:0:arg1}" "${orig_lines[@]}" "${_em_lines[@]:arg1+arg2}")
+                _em_lines=("${_em_lines[@]:0: arg1}" "${orig_lines[@]}" "${_em_lines[@]: arg1+arg2}")
                 _em_cy=$rr_cy; _em_cx=$rr_cx
                 ;;
         esac
@@ -219,7 +219,7 @@ em() {
         local line="$1" result="" i ch col=0
         local -i len=${#line}
         for ((i = 0; i < len; i++)); do
-            ch="${line:i:1}"
+            ch="${line: i:1}"
             if [[ "$ch" == $'\t' ]]; then
                 local -i spaces=$((_em_tab_width - (col % _em_tab_width)))
                 local pad=""
@@ -239,7 +239,7 @@ em() {
         local -i target_col="$2" col=0 i
         local -i len=${#line}
         for ((i = 0; i < len && i < target_col; i++)); do
-            if [[ "${line:i:1}" == $'\t' ]]; then
+            if [[ "${line: i:1}" == $'\t' ]]; then
                 ((col += _em_tab_width - (col % _em_tab_width)))
             else
                 ((col++))
@@ -275,7 +275,7 @@ em() {
                 _em_expand_tabs "$line"
                 local display="${_em_expanded_line}"
                 if ((${#display} > _em_cols)); then
-                    display="${display:0:_em_cols}"
+                    display="${display:0: _em_cols}"
                 fi
                 # Region highlighting
                 if ((reg_active && i >= reg_sy && i <= reg_ey)); then
@@ -291,7 +291,7 @@ em() {
                     ((hs > ${#display})) && hs=${#display}
                     ((he > ${#display})) && he=${#display}
                     if ((hs < he)); then
-                        output+="${display:0:hs}${ESC}[7m${display:hs:he-hs}${ESC}[0m${display:he}"
+                        output+="${display:0: hs}${ESC}[7m${display: hs: he-hs}${ESC}[0m${display: he}"
                     else
                         output+="$display"
                     fi
@@ -317,22 +317,22 @@ em() {
                 pct="$(( (_em_top * 100) / (total - visible_rows) ))%"
             fi
         fi
-        local status
-        printf -v status '-UUU:%s%s  %-20s  (Fundamental) L%-6d %s' \
+        local sline
+        printf -v sline '-UUU:%s%s  %-20s  (Fundamental) L%-6d %s' \
             "$mod_flag" "-" "$_em_bufname" "$((_em_cy + 1))" "$pct"
-        local -i slen=${#status}
+        local -i slen=${#sline}
         while ((slen < _em_cols)); do
-            status+="-"
+            sline+="-"
             ((slen++))
         done
-        status="${status:0:_em_cols}"
-        output+="${ESC}[${status_row};1H${ESC}[7m${status}${ESC}[0m"
+        sline="${sline:0: _em_cols}"
+        output+="${ESC}[${status_row};1H${ESC}[7m${sline}${ESC}[0m"
 
         # Message line
         local -i msg_row=$_em_rows
         output+="${ESC}[${msg_row};1H${ESC}[K"
         if [[ -n "$_em_message" ]]; then
-            output+="${_em_message:0:_em_cols}"
+            output+="${_em_message:0: _em_cols}"
             if ((!_em_msg_persist)); then
                 _em_message=""
             fi
@@ -424,7 +424,7 @@ em() {
                 return
             fi
         elif ((ord >= 1 && ord <= 26)); then
-            local letter="${_em_abc:ord-1:1}"
+            local letter="${_em_abc: ord-1:1}"
             _em_key="C-${letter}"
             return
         elif ((ord == 127 || ord == 8)); then
@@ -562,7 +562,7 @@ em() {
         local ch="$1"
         local line="${_em_lines[_em_cy]}"
         _em_undo_push "delete_char" "$_em_cy" "$_em_cx"
-        _em_lines[_em_cy]="${line:0:_em_cx}${ch}${line:_em_cx}"
+        _em_lines[_em_cy]="${line:0: _em_cx}${ch}${line: _em_cx}"
         ((_em_cx++))
         _em_modified=1
         _em_goal_col=-1
@@ -570,12 +570,12 @@ em() {
 
     _em_newline() {
         local line="${_em_lines[_em_cy]}"
-        local before="${line:0:_em_cx}"
-        local after="${line:_em_cx}"
+        local before="${line:0: _em_cx}"
+        local after="${line: _em_cx}"
         _em_undo_push "split_line" "$_em_cy" "$_em_cx"
         _em_lines[_em_cy]="$before"
         local -i insert_at=$((_em_cy + 1))
-        _em_lines=("${_em_lines[@]:0:insert_at}" "$after" "${_em_lines[@]:insert_at}")
+        _em_lines=("${_em_lines[@]:0: insert_at}" "$after" "${_em_lines[@]: insert_at}")
         ((_em_cy++))
         _em_cx=0
         _em_modified=1
@@ -585,12 +585,12 @@ em() {
 
     _em_open_line() {
         local line="${_em_lines[_em_cy]}"
-        local before="${line:0:_em_cx}"
-        local after="${line:_em_cx}"
+        local before="${line:0: _em_cx}"
+        local after="${line: _em_cx}"
         _em_undo_push "split_line" "$_em_cy" "$_em_cx"
         _em_lines[_em_cy]="$before"
         local -i insert_at=$((_em_cy + 1))
-        _em_lines=("${_em_lines[@]:0:insert_at}" "$after" "${_em_lines[@]:insert_at}")
+        _em_lines=("${_em_lines[@]:0: insert_at}" "$after" "${_em_lines[@]: insert_at}")
         _em_modified=1
     }
 
@@ -598,15 +598,15 @@ em() {
         local line="${_em_lines[_em_cy]}"
         local -i line_len=${#line}
         if ((_em_cx < line_len)); then
-            local deleted="${line:_em_cx:1}"
+            local deleted="${line: _em_cx:1}"
             _em_undo_push "insert_char" "$_em_cy" "$_em_cx" "$deleted"
-            _em_lines[_em_cy]="${line:0:_em_cx}${line:_em_cx+1}"
+            _em_lines[_em_cy]="${line:0: _em_cx}${line: _em_cx+1}"
             _em_modified=1
         elif ((_em_cy < ${#_em_lines[@]} - 1)); then
             _em_undo_push "join_lines" "$_em_cy" "$_em_cx"
             _em_lines[_em_cy]="${line}${_em_lines[_em_cy+1]}"
             local -i del_at=$((_em_cy + 1))
-            _em_lines=("${_em_lines[@]:0:del_at}" "${_em_lines[@]:del_at+1}")
+            _em_lines=("${_em_lines[@]:0: del_at}" "${_em_lines[@]: del_at+1}")
             _em_modified=1
         fi
         _em_goal_col=-1
@@ -631,9 +631,9 @@ em() {
         local line="${_em_lines[_em_cy]}"
         local -i line_len=${#line}
         if ((_em_cx < line_len)); then
-            local killed="${line:_em_cx}"
+            local killed="${line: _em_cx}"
             _em_undo_push "replace_line" "$_em_cy" "$_em_cx" "$line"
-            _em_lines[_em_cy]="${line:0:_em_cx}"
+            _em_lines[_em_cy]="${line:0: _em_cx}"
             if [[ "$_em_last_cmd" == "C-k" ]]; then
                 _em_kill_ring[0]+="$killed"
             else
@@ -645,7 +645,7 @@ em() {
                 _em_undo_push "join_lines" "$_em_cy" "$_em_cx"
                 _em_lines[_em_cy]="${line}${next}"
                 local -i del_at=$((_em_cy + 1))
-                _em_lines=("${_em_lines[@]:0:del_at}" "${_em_lines[@]:del_at+1}")
+                _em_lines=("${_em_lines[@]:0: del_at}" "${_em_lines[@]: del_at+1}")
                 local killed=$'\n'
                 if [[ "$_em_last_cmd" == "C-k" ]]; then
                     _em_kill_ring[0]+="$killed"
@@ -680,13 +680,13 @@ em() {
         parts+=("$tmp")
         if [[ ${#parts[@]} -eq 1 ]]; then
             local line="${_em_lines[_em_cy]}"
-            _em_lines[_em_cy]="${line:0:_em_cx}${parts[0]}${line:_em_cx}"
+            _em_lines[_em_cy]="${line:0: _em_cx}${parts[0]}${line: _em_cx}"
             ((_em_cx += ${#parts[0]}))
             _em_undo_push "replace_region" "$save_cy" "1" "${save_cy}${RS}${save_cx}${RS}${save_line}"
         else
             local line="${_em_lines[_em_cy]}"
-            local before="${line:0:_em_cx}"
-            local after="${line:_em_cx}"
+            local before="${line:0: _em_cx}"
+            local after="${line: _em_cx}"
             _em_lines[_em_cy]="${before}${parts[0]}"
             local -i j
             local -a new_lines=()
@@ -696,7 +696,7 @@ em() {
             local last_part="${parts[${#parts[@]}-1]}"
             new_lines+=("${last_part}${after}")
             local -i insert_at=$((_em_cy + 1))
-            _em_lines=("${_em_lines[@]:0:insert_at}" "${new_lines[@]}" "${_em_lines[@]:insert_at}")
+            _em_lines=("${_em_lines[@]:0: insert_at}" "${new_lines[@]}" "${_em_lines[@]: insert_at}")
             _em_cy=$((_em_cy + ${#parts[@]} - 1))
             _em_cx=${#last_part}
             _em_undo_push "replace_region" "$save_cy" "${#parts[@]}" "${save_cy}${RS}${save_cx}${RS}${save_line}"
@@ -755,21 +755,21 @@ em() {
         done
         local killed=""
         if ((sy == ey)); then
-            killed="${_em_lines[sy]:sx:ex-sx}"
+            killed="${_em_lines[sy]: sx: ex-sx}"
             local line="${_em_lines[sy]}"
-            _em_lines[sy]="${line:0:sx}${line:ex}"
+            _em_lines[sy]="${line:0: sx}${line: ex}"
         else
-            killed="${_em_lines[sy]:sx}"
+            killed="${_em_lines[sy]: sx}"
             for ((j = sy + 1; j < ey; j++)); do
                 killed+=$'\n'"${_em_lines[j]}"
             done
-            killed+=$'\n'"${_em_lines[ey]:0:ex}"
-            local first_part="${_em_lines[sy]:0:sx}"
-            local last_part="${_em_lines[ey]:ex}"
+            killed+=$'\n'"${_em_lines[ey]:0: ex}"
+            local first_part="${_em_lines[sy]:0: sx}"
+            local last_part="${_em_lines[ey]: ex}"
             _em_lines[sy]="${first_part}${last_part}"
             if ((ey > sy)); then
                 local -i del_start=$((sy + 1))
-                _em_lines=("${_em_lines[@]:0:del_start}" "${_em_lines[@]:ey+1}")
+                _em_lines=("${_em_lines[@]:0: del_start}" "${_em_lines[@]: ey+1}")
             fi
         fi
         # After kill, 1 line at sy holds the merged result
@@ -796,14 +796,14 @@ em() {
         fi
         local copied=""
         if ((sy == ey)); then
-            copied="${_em_lines[sy]:sx:ex-sx}"
+            copied="${_em_lines[sy]: sx: ex-sx}"
         else
-            copied="${_em_lines[sy]:sx}"
+            copied="${_em_lines[sy]: sx}"
             local -i j
             for ((j = sy + 1; j < ey; j++)); do
                 copied+=$'\n'"${_em_lines[j]}"
             done
-            copied+=$'\n'"${_em_lines[ey]:0:ex}"
+            copied+=$'\n'"${_em_lines[ey]:0: ex}"
         fi
         _em_kill_ring=("$copied" "${_em_kill_ring[@]}")
         (( ${#_em_kill_ring[@]} > 60 )) && _em_kill_ring=("${_em_kill_ring[@]:0:60}")
@@ -827,7 +827,7 @@ em() {
             _em_found_pos=$start
             return 0
         fi
-        local sub="${haystack:start}"
+        local sub="${haystack: start}"
         # Use [[ ]] — quoted $needle is treated as literal, unlike case patterns
         if [[ "$sub" == *"$needle"* ]]; then
             local prefix="${sub%%"$needle"*}"
@@ -851,7 +851,7 @@ em() {
             else
                 prompt="I-search backward: ${search}"
             fi
-            printf '%s' "${ESC}[${_em_rows};1H${ESC}[K${prompt:0:_em_cols}"
+            printf '%s' "${ESC}[${_em_rows};1H${ESC}[K${prompt:0: _em_cols}"
             printf '%s' "${ESC}[${_em_rows};$((${#prompt} + 1))H"
 
             _em_read_key
@@ -980,7 +980,7 @@ em() {
 
         while ((mb_running)); do
             local display="${prompt}${input}"
-            printf '%s' "${ESC}[${_em_rows};1H${ESC}[K${display:0:_em_cols}"
+            printf '%s' "${ESC}[${_em_rows};1H${ESC}[K${display:0: _em_cols}"
             local -i cpos=$((${#prompt} + cursor + 1))
             printf '%s' "${ESC}[${_em_rows};${cpos}H"
 
@@ -1008,21 +1008,21 @@ em() {
                     ;;
                 "C-d"|"DEL")
                     if ((cursor < ${#input})); then
-                        input="${input:0:cursor}${input:cursor+1}"
+                        input="${input:0: cursor}${input: cursor+1}"
                     fi
                     ;;
                 "BACKSPACE")
                     if ((cursor > 0)); then
                         ((cursor--))
-                        input="${input:0:cursor}${input:cursor+1}"
+                        input="${input:0: cursor}${input: cursor+1}"
                     fi
                     ;;
                 "C-k")
-                    input="${input:0:cursor}"
+                    input="${input:0: cursor}"
                     ;;
                 SELF:*)
                     local ch="${_em_key#SELF:}"
-                    input="${input:0:cursor}${ch}${input:cursor}"
+                    input="${input:0: cursor}${ch}${input: cursor}"
                     ((cursor++))
                     ;;
             esac
@@ -1115,8 +1115,8 @@ em() {
         local save_line="${_em_lines[_em_cy]}"
         # Insert at cursor position
         local cur_line="${_em_lines[_em_cy]}"
-        local before="${cur_line:0:_em_cx}"
-        local after="${cur_line:_em_cx}"
+        local before="${cur_line:0: _em_cx}"
+        local after="${cur_line: _em_cx}"
         if [[ ${#flines[@]} -eq 1 ]]; then
             _em_lines[_em_cy]="${before}${flines[0]}${after}"
             ((_em_cx += ${#flines[0]}))
@@ -1131,7 +1131,7 @@ em() {
             done
             local last="${flines[${#flines[@]}-1]}${after}"
             mid+=("$last")
-            _em_lines=("${_em_lines[@]:0:insert_at}" "${mid[@]}" "${_em_lines[@]:insert_at}")
+            _em_lines=("${_em_lines[@]:0: insert_at}" "${mid[@]}" "${_em_lines[@]: insert_at}")
             _em_cy=$((_em_cy + ${#flines[@]} - 1))
             _em_cx=${#flines[${#flines[@]}-1]}
             _em_undo_push "replace_region" "$save_cy" "${#flines[@]}" "${save_cy}${RS}${save_cx}${RS}${save_line}"
@@ -1158,9 +1158,11 @@ em() {
         _em_bufs["${bid}_nlines"]=$nlines
         local -i i
         # Clear old lines that may be stale if buffer shrank
+        # Note: zsh unset on assoc array keys is broken with KSH_ARRAYS,
+        # so we set to empty string instead (functionally equivalent)
         local -i old_n=${_em_bufs["${bid}_old_nlines"]:-0}
         for ((i = nlines; i < old_n; i++)); do
-            unset "_em_bufs[${bid}_line_${i}]" 2>/dev/null
+            _em_bufs["${bid}_line_${i}"]=""
         done
         _em_bufs["${bid}_old_nlines"]=$nlines
         for ((i = 0; i < nlines; i++)); do
@@ -1308,15 +1310,15 @@ em() {
             ((bid != target_bid)) && new_ids+=("$bid")
         done
         _em_buf_ids=("${new_ids[@]}")
-        # Clean up assoc array keys
+        # Clean up assoc array keys (set empty — zsh unset broken with KSH_ARRAYS)
         local -i n=${_em_bufs["${target_bid}_nlines"]:-0}
         local -i i
         for ((i = 0; i < n; i++)); do
-            unset "_em_bufs[${target_bid}_line_${i}]" 2>/dev/null
+            _em_bufs["${target_bid}_line_${i}"]=""
         done
         local k
         for k in cy cx top mark_y mark_x modified filename name goal_col nlines old_nlines undo; do
-            unset "_em_bufs[${target_bid}_${k}]" 2>/dev/null
+            _em_bufs["${target_bid}_${k}"]=""
         done
         # Switch to another buffer if we killed the current one
         if ((target_bid == _em_cur_buf)); then
@@ -1404,7 +1406,7 @@ em() {
         local ch_info=""
         local line="${_em_lines[_em_cy]}"
         if ((_em_cx < ${#line})); then
-            local ch="${line:_em_cx:1}"
+            local ch="${line: _em_cx:1}"
             local -i ord
             printf -v ord '%d' "'$ch" 2>/dev/null || ord=0
             printf -v ch_info "Char: %s (%d, #o%o, #x%x)" "$ch" "$ord" "$ord" "$ord"
@@ -1435,7 +1437,7 @@ em() {
         # Skip non-word chars first
         while true; do
             line="${_em_lines[cy]}"
-            while ((cx < ${#line})) && ! _em_is_word_char "${line:cx:1}"; do
+            while ((cx < ${#line})) && ! _em_is_word_char "${line: cx:1}"; do
                 ((cx++))
             done
             if ((cx < ${#line})); then break; fi
@@ -1445,7 +1447,7 @@ em() {
         # Skip word chars
         while true; do
             line="${_em_lines[cy]}"
-            while ((cx < ${#line})) && _em_is_word_char "${line:cx:1}"; do
+            while ((cx < ${#line})) && _em_is_word_char "${line: cx:1}"; do
                 ((cx++))
             done
             break
@@ -1470,7 +1472,7 @@ em() {
         # Skip non-word chars backward
         while true; do
             line="${_em_lines[cy]}"
-            while ((cx >= 0)) && ((cx < ${#line})) && ! _em_is_word_char "${line:cx:1}"; do
+            while ((cx >= 0)) && ((cx < ${#line})) && ! _em_is_word_char "${line: cx:1}"; do
                 ((cx--))
             done
             if ((cx >= 0)) && ((cx < ${#line})); then break; fi
@@ -1479,7 +1481,7 @@ em() {
         done
         # Skip word chars backward
         line="${_em_lines[cy]}"
-        while ((cx > 0)) && _em_is_word_char "${line:cx-1:1}"; do
+        while ((cx > 0)) && _em_is_word_char "${line: cx-1:1}"; do
             ((cx--))
         done
         _em_cy=$cy; _em_cx=$cx
@@ -1515,9 +1517,9 @@ em() {
         local -i p=$_em_cx
         if ((p >= len)); then p=$((len - 1)); fi
         if ((p < 1)); then return; fi
-        local a="${line:p-1:1}" b="${line:p:1}"
+        local a="${line: p-1:1}" b="${line: p:1}"
         _em_undo_push "replace_line" "$_em_cy" "$_em_cx" "$line"
-        _em_lines[_em_cy]="${line:0:p-1}${b}${a}${line:p+1}"
+        _em_lines[_em_cy]="${line:0: p-1}${b}${a}${line: p+1}"
         _em_cx=$((p + 1))
         ((_em_cx > len)) && _em_cx=$len
         _em_modified=1
@@ -1603,7 +1605,7 @@ em() {
                 "SELF:y"|"C-m")
                     local line="${_em_lines[_em_cy]}"
                     _em_undo_push "replace_line" "$_em_cy" "$_em_cx" "$line"
-                    _em_lines[_em_cy]="${line:0:_em_cx}${to}${line:_em_cx+${#from}}"
+                    _em_lines[_em_cy]="${line:0: _em_cx}${to}${line: _em_cx+${#from}}"
                     ((_em_cx += ${#to}))
                     ((count++))
                     _em_modified=1
@@ -1614,14 +1616,14 @@ em() {
                 "SELF:!")
                     local line="${_em_lines[_em_cy]}"
                     _em_undo_push "replace_line" "$_em_cy" "$_em_cx" "$line"
-                    _em_lines[_em_cy]="${line:0:_em_cx}${to}${line:_em_cx+${#from}}"
+                    _em_lines[_em_cy]="${line:0: _em_cx}${to}${line: _em_cx+${#from}}"
                     ((_em_cx += ${#to}))
                     ((count++))
                     _em_modified=1
                     while _em_isearch_next "$from" 1 "$_em_cy" "$_em_cx"; do
                         line="${_em_lines[_em_cy]}"
                         _em_undo_push "replace_line" "$_em_cy" "$_em_cx" "$line"
-                        _em_lines[_em_cy]="${line:0:_em_cx}${to}${line:_em_cx+${#from}}"
+                        _em_lines[_em_cy]="${line:0: _em_cx}${to}${line: _em_cx+${#from}}"
                         ((_em_cx += ${#to}))
                         ((count++))
                         _em_modified=1
@@ -1632,7 +1634,7 @@ em() {
                     [[ "$_em_key" == "SELF:." ]] && {
                         local line="${_em_lines[_em_cy]}"
                         _em_undo_push "replace_line" "$_em_cy" "$_em_cx" "$line"
-                        _em_lines[_em_cy]="${line:0:_em_cx}${to}${line:_em_cx+${#from}}"
+                        _em_lines[_em_cy]="${line:0: _em_cx}${to}${line: _em_cx+${#from}}"
                         ((count++))
                         _em_modified=1
                     }
@@ -1807,20 +1809,20 @@ em() {
         if ((cx >= len)); then return; fi
         _em_undo_push "replace_line" "$_em_cy" "$_em_cx" "$line"
         # Skip non-word chars
-        while ((cx < len)) && ! _em_is_word_char "${line:cx:1}"; do
+        while ((cx < len)) && ! _em_is_word_char "${line: cx:1}"; do
             ((cx++))
         done
         # Capitalize first word char, lowercase rest
         local -i first=1
-        while ((cx < len)) && _em_is_word_char "${line:cx:1}"; do
-            local ch="${line:cx:1}"
+        while ((cx < len)) && _em_is_word_char "${line: cx:1}"; do
+            local ch="${line: cx:1}"
             if ((first)); then
                 ch="${(U)ch}"
                 first=0
             else
                 ch="${(L)ch}"
             fi
-            line="${line:0:cx}${ch}${line:cx+1}"
+            line="${line:0: cx}${ch}${line: cx+1}"
             ((cx++))
         done
         _em_lines[_em_cy]="$line"
@@ -1834,13 +1836,13 @@ em() {
         local -i cx=$_em_cx len=${#line}
         if ((cx >= len)); then return; fi
         _em_undo_push "replace_line" "$_em_cy" "$_em_cx" "$line"
-        while ((cx < len)) && ! _em_is_word_char "${line:cx:1}"; do
+        while ((cx < len)) && ! _em_is_word_char "${line: cx:1}"; do
             ((cx++))
         done
-        while ((cx < len)) && _em_is_word_char "${line:cx:1}"; do
-            local ch="${line:cx:1}"
+        while ((cx < len)) && _em_is_word_char "${line: cx:1}"; do
+            local ch="${line: cx:1}"
             ch="${(U)ch}"
-            line="${line:0:cx}${ch}${line:cx+1}"
+            line="${line:0: cx}${ch}${line: cx+1}"
             ((cx++))
         done
         _em_lines[_em_cy]="$line"
@@ -1854,13 +1856,13 @@ em() {
         local -i cx=$_em_cx len=${#line}
         if ((cx >= len)); then return; fi
         _em_undo_push "replace_line" "$_em_cy" "$_em_cx" "$line"
-        while ((cx < len)) && ! _em_is_word_char "${line:cx:1}"; do
+        while ((cx < len)) && ! _em_is_word_char "${line: cx:1}"; do
             ((cx++))
         done
-        while ((cx < len)) && _em_is_word_char "${line:cx:1}"; do
-            local ch="${line:cx:1}"
+        while ((cx < len)) && _em_is_word_char "${line: cx:1}"; do
+            local ch="${line: cx:1}"
             ch="${(L)ch}"
-            line="${line:0:cx}${ch}${line:cx+1}"
+            line="${line:0: cx}${ch}${line: cx+1}"
             ((cx++))
         done
         _em_lines[_em_cy]="$line"
@@ -1890,22 +1892,22 @@ em() {
             [[ -n "$text" ]] && text+=" "
             # Collapse whitespace
             local stripped="${_em_lines[i]}"
-            stripped="${stripped#"${stripped%%[![:space:]]*}"}"
+            stripped="${stripped#"${stripped%%[![: space:]]*}"}"
             text+="$stripped"
         done
         # Re-wrap at fill column
         local -a new_lines=()
         while [[ ${#text} -gt $_em_fill_column ]]; do
             local -i break_at=$_em_fill_column
-            while ((break_at > 0)) && [[ "${text:break_at:1}" != " " ]]; do
+            while ((break_at > 0)) && [[ "${text: break_at:1}" != " " ]]; do
                 ((break_at--))
             done
             if ((break_at == 0)); then
                 # No space found; break at fill column
                 break_at=$_em_fill_column
             fi
-            new_lines+=("${text:0:break_at}")
-            text="${text:break_at}"
+            new_lines+=("${text:0: break_at}")
+            text="${text: break_at}"
             text="${text# }"  # Remove leading space
         done
         [[ -n "$text" ]] && new_lines+=("$text")
@@ -1916,7 +1918,7 @@ em() {
             packed+="${RS}${_em_lines[i]}"
         done
         # Replace lines
-        _em_lines=("${_em_lines[@]:0:start}" "${new_lines[@]}" "${_em_lines[@]:end+1}")
+        _em_lines=("${_em_lines[@]:0: start}" "${new_lines[@]}" "${_em_lines[@]: end+1}")
         _em_undo_push "replace_region" "$start" "${#new_lines[@]}" "$packed"
         _em_cy=$start
         _em_cx=0
