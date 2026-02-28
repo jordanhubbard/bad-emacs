@@ -171,13 +171,79 @@ em() {
         _em_undo=()
     }
 
+    # ===== ARRAY HELPERS (avoid O(N) full-array splices) =====
+
+    _em_insert_line_at() {
+        local -i pos=$1
+        local -i len=${#_em_lines[@]}
+        local -i i
+        for ((i = len; i > pos; i--)); do
+            _em_lines[i]="${_em_lines[i-1]}"
+        done
+        _em_lines[pos]="$2"
+    }
+
+    _em_delete_line_at() {
+        local -i pos=$1
+        local -i len=${#_em_lines[@]}
+        local -i last=$((len - 1))
+        local -i i
+        for ((i = pos; i < last; i++)); do
+            _em_lines[i]="${_em_lines[i+1]}"
+        done
+        unset "_em_lines[$last]"
+    }
+
+    _em_delete_lines_at() {
+        local -i pos=$1 count=$2
+        local -i len=${#_em_lines[@]}
+        local -i new_len=$((len - count))
+        local -i i
+        for ((i = pos; i < new_len; i++)); do
+            _em_lines[i]="${_em_lines[i+count]}"
+        done
+        for ((i = new_len; i < len; i++)); do
+            unset "_em_lines[$i]"
+        done
+    }
+
+    _em_splice_lines() {
+        local -i start=$1 del_count=$2
+        local -i new_count=${#_em_splice_new[@]}
+        local -i len=${#_em_lines[@]}
+        local -i diff=$((new_count - del_count))
+        local -i i
+        if ((diff > 0)); then
+            for ((i = len + diff - 1; i >= start + new_count; i--)); do
+                _em_lines[i]="${_em_lines[i-diff]}"
+            done
+        elif ((diff < 0)); then
+            local -i new_len=$((len + diff))
+            for ((i = start + new_count; i < new_len; i++)); do
+                _em_lines[i]="${_em_lines[i-diff]}"
+            done
+            for ((i = new_len; i < len; i++)); do
+                unset "_em_lines[$i]"
+            done
+        fi
+        for ((i = 0; i < new_count; i++)); do
+            _em_lines[start + i]="${_em_splice_new[i]}"
+        done
+    }
+
     # ===== UNDO SYSTEM =====
 
     _em_undo_push() {
         local record="$1${US}$2${US}$3"
         [[ -n "${4+x}" ]] && record+="${US}$4"
         _em_undo+=("$record")
-        (( ${#_em_undo[@]} > 200 )) && _em_undo=("${_em_undo[@]:100}")
+        local -i _undo_max=200 _undo_trim=100
+        if (( ${#_em_lines[@]} > 3000 )); then
+            _undo_max=50; _undo_trim=25
+        elif (( ${#_em_lines[@]} > 1000 )); then
+            _undo_max=100; _undo_trim=50
+        fi
+        (( ${#_em_undo[@]} > _undo_max )) && _em_undo=("${_em_undo[@]:_undo_trim}")
     }
 
     _em_undo() {
@@ -203,16 +269,14 @@ em() {
             join_lines)
                 local line="${_em_lines[arg1]}"
                 _em_lines[arg1]="${line:0:arg2}"
-                local -i ins=$((arg1 + 1))
-                _em_lines=("${_em_lines[@]:0:ins}" "${line:arg2}" "${_em_lines[@]:ins}")
+                _em_insert_line_at "$((arg1 + 1))" "${line:arg2}"
                 _em_cy=$arg1; _em_cx=$arg2
                 ;;
             split_line)
                 local line="${_em_lines[arg1]}"
                 local next="${_em_lines[arg1+1]}"
                 _em_lines[arg1]="${line}${next}"
-                local -i del=$((arg1 + 1))
-                _em_lines=("${_em_lines[@]:0:del}" "${_em_lines[@]:del+1}")
+                _em_delete_line_at "$((arg1 + 1))"
                 _em_cy=$arg1; _em_cx=$arg2
                 ;;
             replace_line)
@@ -229,8 +293,8 @@ em() {
                 done
                 rr_parts+=("$packed")
                 local -i rr_cy=${rr_parts[0]} rr_cx=${rr_parts[1]}
-                local -a orig_lines=("${rr_parts[@]:2}")
-                _em_lines=("${_em_lines[@]:0:arg1}" "${orig_lines[@]}" "${_em_lines[@]:arg1+arg2}")
+                local -a _em_splice_new=("${rr_parts[@]:2}")
+                _em_splice_lines "$arg1" "$arg2"
                 _em_cy=$rr_cy; _em_cx=$rr_cx
                 ;;
         esac
@@ -240,7 +304,12 @@ em() {
     }
 
     _em_expand_tabs() {
-        local line="$1" result="" i ch col=0
+        local line="$1"
+        if [[ "$line" != *$'\t'* ]]; then
+            _em_expanded_line="$line"
+            return
+        fi
+        local result="" i ch col=0
         local -i len=${#line}
         for ((i = 0; i < len; i++)); do
             ch="${line:i:1}"
@@ -260,8 +329,12 @@ em() {
 
     _em_col_to_display() {
         local line="$1"
-        local -i target_col="$2" col=0 i
-        local -i len=${#line}
+        local -i target_col="$2"
+        if [[ "$line" != *$'\t'* ]]; then
+            _em_display_col=$target_col
+            return
+        fi
+        local -i col=0 i len=${#line}
         for ((i = 0; i < len && i < target_col; i++)); do
             if [[ "${line:i:1}" == $'\t' ]]; then
                 ((col += _em_tab_width - (col % _em_tab_width)))
@@ -366,10 +439,11 @@ em() {
         printf -v status '%s%s%s  %-20s  (Fundamental) L%-6d %s' \
             "-UUU:" "$mod_flag" "-" "$_em_bufname" "$((_em_cy + 1))" "$pct"
         local -i slen=${#status}
-        while ((slen < _em_cols)); do
-            status+="-"
-            ((slen++))
-        done
+        if ((slen < _em_cols)); then
+            local spad=""
+            printf -v spad '%*s' "$((_em_cols - slen))" ''
+            status+="${spad// /-}"
+        fi
         status="${status:0:_em_cols}"
         output+="${ESC}[${status_row};1H${ESC}[7m${status}${ESC}[0m"
 
@@ -696,8 +770,7 @@ em() {
         local after="${line:_em_cx}"
         _em_undo_push "split_line" "$_em_cy" "$_em_cx"
         _em_lines[_em_cy]="$before"
-        local -i insert_at=$((_em_cy + 1))
-        _em_lines=("${_em_lines[@]:0:insert_at}" "$after" "${_em_lines[@]:insert_at}")
+        _em_insert_line_at "$((_em_cy + 1))" "$after"
         ((_em_cy++))
         _em_cx=0
         _em_modified=1
@@ -711,8 +784,7 @@ em() {
         local after="${line:_em_cx}"
         _em_undo_push "split_line" "$_em_cy" "$_em_cx"
         _em_lines[_em_cy]="$before"
-        local -i insert_at=$((_em_cy + 1))
-        _em_lines=("${_em_lines[@]:0:insert_at}" "$after" "${_em_lines[@]:insert_at}")
+        _em_insert_line_at "$((_em_cy + 1))" "$after"
         _em_modified=1
     }
 
@@ -727,8 +799,7 @@ em() {
         elif ((_em_cy < ${#_em_lines[@]} - 1)); then
             _em_undo_push "join_lines" "$_em_cy" "$_em_cx"
             _em_lines[_em_cy]="${line}${_em_lines[_em_cy+1]}"
-            local -i del_at=$((_em_cy + 1))
-            _em_lines=("${_em_lines[@]:0:del_at}" "${_em_lines[@]:del_at+1}")
+            _em_delete_line_at "$((_em_cy + 1))"
             _em_modified=1
         fi
         _em_goal_col=-1
@@ -776,8 +847,7 @@ em() {
                 local next="${_em_lines[_em_cy+1]}"
                 _em_undo_push "join_lines" "$_em_cy" "$_em_cx"
                 _em_lines[_em_cy]="${line}${next}"
-                local -i del_at=$((_em_cy + 1))
-                _em_lines=("${_em_lines[@]:0:del_at}" "${_em_lines[@]:del_at+1}")
+                _em_delete_line_at "$((_em_cy + 1))"
                 local killed=$'\n'
                 if [[ "$_em_last_cmd" == "C-k" ]]; then
                     _em_kill_ring[0]+="$killed"
@@ -828,8 +898,8 @@ em() {
             done
             local last_part="${parts[-1]}"
             new_lines+=("${last_part}${after}")
-            local -i insert_at=$((_em_cy + 1))
-            _em_lines=("${_em_lines[@]:0:insert_at}" "${new_lines[@]}" "${_em_lines[@]:insert_at}")
+            local -a _em_splice_new=("${new_lines[@]}")
+            _em_splice_lines "$((_em_cy + 1))" 0
             _em_cy=$((_em_cy + ${#parts[@]} - 1))
             _em_cx=${#last_part}
             _em_undo_push "replace_region" "$save_cy" "${#parts[@]}" "${save_cy}${RS}${save_cx}${RS}${save_line}"
@@ -901,8 +971,7 @@ em() {
             local last_part="${_em_lines[ey]:ex}"
             _em_lines[sy]="${first_part}${last_part}"
             if ((ey > sy)); then
-                local -i del_start=$((sy + 1))
-                _em_lines=("${_em_lines[@]:0:del_start}" "${_em_lines[@]:ey+1}")
+                _em_delete_lines_at "$((sy + 1))" "$((ey - sy))"
             fi
         fi
         # After kill, 1 line at sy holds the merged result
@@ -1564,7 +1633,8 @@ em() {
             done
             local last="${flines[-1]}${after}"
             mid+=("$last")
-            _em_lines=("${_em_lines[@]:0:insert_at}" "${mid[@]}" "${_em_lines[@]:insert_at}")
+            local -a _em_splice_new=("${mid[@]}")
+            _em_splice_lines "$insert_at" 0
             _em_cy=$((_em_cy + ${#flines[@]} - 1))
             _em_cx=${#flines[-1]}
             _em_undo_push "replace_region" "$save_cy" "${#flines[@]}" "${save_cy}${RS}${save_cx}${RS}${save_line}"
@@ -2375,7 +2445,8 @@ em() {
             packed+="${RS}${_em_lines[i]}"
         done
         # Replace lines
-        _em_lines=("${_em_lines[@]:0:start}" "${new_lines[@]}" "${_em_lines[@]:end+1}")
+        local -a _em_splice_new=("${new_lines[@]}")
+        _em_splice_lines "$start" "$((end - start + 1))"
         _em_undo_push "replace_region" "$start" "${#new_lines[@]}" "$packed"
         _em_cy=$start
         _em_cx=0
