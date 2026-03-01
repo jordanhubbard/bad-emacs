@@ -8,7 +8,7 @@ file delete -force $testfile
 spawn zsh -f -c "source ./em.zsh && em $testfile"
 
 expect {
-    "bad emacs" { puts "\nPASS: editor started" }
+    "shemacs" { puts "\nPASS: editor started" }
     timeout { puts "\nFAIL: editor did not start"; exit 1 }
 }
 

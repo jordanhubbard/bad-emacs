@@ -5,13 +5,13 @@ BUMP ?= patch
 .PHONY: install uninstall check test release
 
 install:
-	@echo "Installing bad-emacs to home directory..."
+	@echo "Installing shemacs to home directory..."
 	@cp "$(SRCDIR)/em.sh" "$(HOME)/.em.sh"
 	@cp "$(SRCDIR)/em.zsh" "$(HOME)/.em.zsh"
 	@echo "Installed ~/.em.sh and ~/.em.zsh"
 	@if ! grep -q 'source.*\.em\.sh' "$(HOME)/.bashrc" 2>/dev/null; then \
 		echo '' >> "$(HOME)/.bashrc"; \
-		echo '# em - bad emacs clone (shell function)' >> "$(HOME)/.bashrc"; \
+		echo '# em - shemacs (shell function)' >> "$(HOME)/.bashrc"; \
 		echo 'source "$(HOME)/.em.sh"' >> "$(HOME)/.bashrc"; \
 		echo "Added source line to ~/.bashrc"; \
 	else \
@@ -19,7 +19,7 @@ install:
 	fi
 	@if ! grep -q 'source.*\.em\.zsh' "$(HOME)/.zshrc" 2>/dev/null; then \
 		echo '' >> "$(HOME)/.zshrc"; \
-		echo '# em - bad emacs clone (shell function)' >> "$(HOME)/.zshrc"; \
+		echo '# em - shemacs (shell function)' >> "$(HOME)/.zshrc"; \
 		echo 'source "$(HOME)/.em.zsh"' >> "$(HOME)/.zshrc"; \
 		echo "Added source line to ~/.zshrc"; \
 	else \
@@ -29,9 +29,9 @@ install:
 
 uninstall:
 	@rm -f "$(HOME)/.em.sh" "$(HOME)/.em.zsh"
-	@[ -f "$(HOME)/.bashrc" ] && sed -i '' '/# em - bad emacs/d; /source.*\.em\.\(sh\|zsh\)/d' "$(HOME)/.bashrc" || true
-	@[ -f "$(HOME)/.zshrc" ] && sed -i '' '/# em - bad emacs/d; /source.*\.em\.\(sh\|zsh\)/d' "$(HOME)/.zshrc" || true
-	@echo "Uninstalled bad-emacs."
+	@[ -f "$(HOME)/.bashrc" ] && sed -i '' '/# em - bad emacs/d; /# em - shemacs/d; /source.*\.em\.\(sh\|zsh\)/d' "$(HOME)/.bashrc" || true
+	@[ -f "$(HOME)/.zshrc" ] && sed -i '' '/# em - bad emacs/d; /# em - shemacs/d; /source.*\.em\.\(sh\|zsh\)/d' "$(HOME)/.zshrc" || true
+	@echo "Uninstalled shemacs."
 
 check:
 	@echo "Checking bash version..."

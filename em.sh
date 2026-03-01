@@ -1,4 +1,4 @@
-# em - A bad emacs clone (mg-compatible) as a single shell function
+# em - shemacs (mg-compatible) as a single shell function
 #
 # Source this file in your .bashrc:  source /path/to/em.sh
 # Then run:  em [filename]
@@ -185,7 +185,7 @@ em() {
         trap '_em_handle_resize' WINCH
         printf '%s' "${ESC}[?1049h${ESC}[?25h"
         _em_handle_resize
-        _em_message="em: bad emacs (C-x C-c to quit, C-h b for help)"
+        _em_message="em: shemacs (C-x C-c to quit, C-h b for help)"
         # Detect system clipboard tool
         if command -v pbcopy >/dev/null 2>&1; then
             _em_clip_copy="pbcopy"; _em_clip_paste="pbpaste"

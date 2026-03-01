@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/release.sh — Automated release for bad-emacs
+# scripts/release.sh — Automated release for shemacs
 # Usage: bash scripts/release.sh [patch|minor|major]
 # Called by: make release [BUMP=patch|minor|major]
 

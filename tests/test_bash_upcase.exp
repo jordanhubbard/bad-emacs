@@ -5,7 +5,7 @@ set timeout 10
 spawn bash --norc --noprofile ./em.sh
 
 expect {
-    "bad emacs" { puts "\nPASS: editor started" }
+    "shemacs" { puts "\nPASS: editor started" }
     timeout { puts "\nFAIL: editor did not start"; exit 1 }
 }
 

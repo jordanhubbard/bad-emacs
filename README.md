@@ -1,6 +1,6 @@
 # em
 
-A bad emacs clone (mg-compatible) implemented as a single shell
+shemacs — an Emacs/mg-compatible editor implemented as a single shell
 function. No compiled languages, no dependencies beyond a standard
 Linux/macOS install -- just bash (or zsh) and `/usr/bin`.
 
@@ -17,7 +17,7 @@ Both **bash** (`em.sh`) and **zsh** (`em.zsh`) versions are included.
 Clone the repo and use `make install`:
 
 ```bash
-git clone https://github.com/jordanhubbard/bad-emacs.git ~/em
+git clone https://github.com/jordanhubbard/shemacs.git ~/em
 cd ~/em
 make install
 ```

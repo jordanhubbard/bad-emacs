@@ -1,4 +1,4 @@
-# AGENTS.md — bad-emacs (`em`)
+# AGENTS.md — shemacs (`em`)
 
 ## Project Summary
 

@@ -1,4 +1,4 @@
-# em - A bad emacs clone (mg-compatible) as a single shell function (zsh version)
+# em - shemacs (mg-compatible) as a single shell function (zsh version)
 #
 # Source this file in your .zshrc:  source /path/to/em.zsh
 # Then run:  em [filename]
@@ -173,7 +173,7 @@ em() {
         trap '_em_handle_resize' WINCH
         printf '%s' "${ESC}[?1049h${ESC}[?25h"
         _em_handle_resize
-        _em_message="em: bad emacs [zsh] (C-x C-c to quit, C-h b for help)"
+        _em_message="em: shemacs [zsh] (C-x C-c to quit, C-h b for help)"
         # Detect system clipboard tool
         if command -v pbcopy >/dev/null 2>&1; then
             _em_clip_copy="pbcopy"; _em_clip_paste="pbpaste"
