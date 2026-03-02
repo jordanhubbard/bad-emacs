@@ -64,6 +64,9 @@ em() {
     local _em_script_dir
     _em_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || _em_script_dir=""
 
+    # Enable checkwinsize so LINES and COLUMNS are updated
+    shopt -s checkwinsize 2>/dev/null
+
     # Source the sheme interpreter if not already loaded.
     # Search order: installed ~/.bs.sh, sibling sheme/ repo, common prefixes.
     local _em_bs_path=""

@@ -68,6 +68,10 @@ through [sheme](https://github.com/jordanhubbard/sheme)'s built-in
 primitives, so the Scheme source itself contains no bash- or zsh-specific
 code.
 
+**Caveat:** The Scheme version may have a slow initial startup time (several seconds)
+due to the overhead of parsing and caching the Scheme code in a shell environment.
+Subsequent runs are faster but still slower than the pure bash/zsh versions.
+
 `em.scm.sh` is the thin launcher that sources the sheme interpreter,
 loads `em.scm`, and calls `(em-main)`.
 
