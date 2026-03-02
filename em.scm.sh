@@ -110,6 +110,12 @@ em() {
        && _em_load_cache "$_em_cache_file"; then
         : # cached state restored
     else
+        if [[ ! -f "$_em_cache_file" ]]; then
+            printf "em: Still working - first-time Scheme compile in progress.\n" >&2
+            printf "em: This can take a while; future runs will use the cache and start much faster.\n" >&2
+        else
+            printf "em: Scheme cache is stale; rebuilding cache for this run.\n" >&2
+        fi
         bs "$(cat "$_em_scm_file")"
         _em_save_cache "$_em_cache_file" "$_em_scm_file" 2>/dev/null || true
     fi
