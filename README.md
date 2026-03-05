@@ -26,7 +26,9 @@ cd ~/em
 make install
 ```
 
-This copies `em.sh` and `em.zsh` to your home directory and adds `source` lines to both `~/.bashrc` and `~/.zshrc`.
+This installs the plain shell editor by default: it copies `em.sh` and
+`em.zsh` to your home directory and adds `source` lines to both
+`~/.bashrc` and `~/.zshrc`.
 
 Now reload your shell and `em` is available as a command:
 
@@ -43,7 +45,9 @@ instantly -- there is no fork/exec overhead.
 
 ```bash
 make install           # copy em.sh/em.zsh to ~/ and add source lines to rc files
+make install-scm       # optional: add sheme-backed Scheme backend for bash (slower startup)
 make uninstall         # remove copied files and source lines
+make uninstall-scm     # remove only Scheme backend files/source line
 make check             # syntax-check bash and zsh versions
 make test              # run integration tests
 make example           # run bash/zsh smoke examples
@@ -101,7 +105,16 @@ builtins introduced in that release: `read-byte`, `write-stdout`,
    cd ~/sheme && make install
    ```
 
-2. Then run or source `em.scm.sh`:
+2. Optionally install the Scheme backend into your bash startup:
+
+   ```bash
+   cd /path/to/shemacs
+   make install-scm
+   source ~/.bashrc
+   em myfile.txt
+   ```
+
+3. Or run/source `em.scm.sh` directly:
 
    ```bash
    # Run standalone

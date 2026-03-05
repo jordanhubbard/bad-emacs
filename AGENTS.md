@@ -60,8 +60,8 @@ or sourced into a shell rc file to define the `em()` function for instant
 startup.
 
 **Dependency**: `em.scm` requires [sheme](https://github.com/jordanhubbard/sheme)
-(`bs.sh`) to be installed. Install sheme first, then use `make install` to
-set up the shemacs Scheme backend.
+(`bs.sh`) to be installed. Install sheme first, then use `make install-scm`
+to set up the optional shemacs Scheme backend.
 
 ## Architecture
 
@@ -245,9 +245,10 @@ table is in `_em_dispatch` (line ~2011) and `_em_read_cx_key` (line ~1983).
 
 ```bash
 make check                       # syntax-check bash and zsh versions
-make install                     # auto-detect shell, install to correct rc file
-make install SHELL_TYPE=zsh      # force zsh install to ~/.zshrc
-make uninstall                   # remove source line from rc file
+make install                     # default shell install (em.sh + em.zsh)
+make install-scm                 # optional Scheme backend for bash
+make uninstall                   # remove all installed shemacs files/source lines
+make uninstall-scm               # remove only Scheme backend files/source line
 ```
 
 The bash and zsh versions can also be run standalone:
