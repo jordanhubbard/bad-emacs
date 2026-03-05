@@ -225,6 +225,8 @@ Delimiter constants for serialization:
 - **Function cleanup**: On exit, all `_em_*` functions are unset via
   `declare -F` (bash) or `${(k)functions}` (zsh) enumeration, leaving
   no namespace pollution.
+- **Push gate**: Before any push, `make test` and `make example` must
+  both pass when run from bash and zsh.
 
 ## Naming Conventions
 

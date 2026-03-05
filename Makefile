@@ -5,7 +5,7 @@ BUMP       ?= patch
 
 .DEFAULT_GOAL := help
 
-.PHONY: install install-scm uninstall uninstall-scm check test release help
+.PHONY: install install-scm uninstall uninstall-scm check test example release help
 
 help: ## Show available make targets
 	@awk 'BEGIN {FS = ":.*##"}; /^[a-zA-Z_-]+:.*##/ { printf "  %-20s %s\n", $$1, $$2 }' \
@@ -76,6 +76,25 @@ check: ## Validate shell syntax without running tests
 
 test: check ## Run full integration test suite (requires expect)
 	@./tests/run_tests.sh
+
+example: check ## Run bash and zsh editor smoke examples
+	@if ! command -v expect >/dev/null 2>&1; then \
+		echo "expect is required for make example"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "── Bash smoke example (start and quit) ──"
+	@expect tests/test_bash_start_quit.exp
+	@echo ""
+	@echo "── Zsh smoke example (start and quit) ──"
+	@if command -v zsh >/dev/null 2>&1; then \
+		expect tests/test_zsh_start_quit.exp; \
+	else \
+		echo "zsh is required for make example"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "Done! Smoke examples passed."
 
 release: ## Create a release: make release BUMP=patch|minor|major
 	@bash scripts/release.sh $(BUMP)

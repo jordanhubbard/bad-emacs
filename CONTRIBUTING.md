@@ -14,12 +14,15 @@ Open a GitHub issue. Include:
 
 1. Fork the repo and create a feature branch from `main`.
 2. Make your changes.
-3. Verify all tests pass: `make test`
-4. Open a PR against `main` with a clear description of what changed and why.
+3. Before every push, run and pass `make test` and `make example` in both
+   bash and zsh shells.
+4. Verify all tests pass: `make test`
+5. Open a PR against `main` with a clear description of what changed and why.
 
 ### PR Checklist
 
 - [ ] `make test` passes (bash and zsh integration tests)
+- [ ] Before each push, `make test` and `make example` pass in both bash and zsh
 - [ ] `make check` passes (syntax validation)
 - [ ] No regressions in existing keybindings
 - [ ] README updated if keybindings or install steps changed
@@ -30,6 +33,7 @@ Open a GitHub issue. Include:
 ```bash
 make check          # syntax validation only (fast)
 make test           # bash and zsh integration tests (requires expect)
+make example        # bash/zsh smoke examples (requires expect)
 make test SCM=1     # also run Scheme editor tests (requires expect + sheme)
 ```
 

@@ -45,6 +45,17 @@ instantly -- there is no fork/exec overhead.
 make install           # copy em.sh/em.zsh to ~/ and add source lines to rc files
 make uninstall         # remove copied files and source lines
 make check             # syntax-check bash and zsh versions
+make test              # run integration tests
+make example           # run bash/zsh smoke examples
+```
+
+## Contributor Pre-Push Checks
+
+Before every push, run and pass these targets from both bash and zsh shells:
+
+```bash
+make test
+make example
 ```
 
 ### Standalone (no sourcing)
