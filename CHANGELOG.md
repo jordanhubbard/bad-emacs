@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.8] - 2026-03-05
+
+### Added
+- use compiled cache for native bash speed at runtime
+
+### Fixed
+- make install/uninstall idempotent with safe portable sourcing
+- make install now copies all sources including Scheme and sheme
+- default to shell install with explicit Scheme opt-in
+
+
 ## [1.0.7] - 2026-03-02
 
 ### Fixed
