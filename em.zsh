@@ -34,6 +34,12 @@
 #   C-z        suspend           C-h b      describe bindings
 #   C-i/TAB    indent line       Shift-TAB  dedent line
 
+# Include guard: skip re-sourcing, but allow standalone execution
+if [[ -n "${_SHEMACS_ZSH_LOADED:-}" && "$ZSH_EVAL_CONTEXT" != "toplevel" ]]; then
+    return 0
+fi
+_SHEMACS_ZSH_LOADED=1
+
 em() {
     # Ensure clean zsh options scoped to this function
     emulate -L zsh

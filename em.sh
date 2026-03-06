@@ -17,6 +17,13 @@ if [[ "${BASH_VERSINFO:-0}" -lt 4 ]]; then
     echo "em requires Bash 4+. Install via: brew install bash" >&2
     return 2>/dev/null || exit 1
 fi
+
+# Include guard: skip re-sourcing, but allow standalone execution
+if [[ -n "${_SHEMACS_LOADED:-}" && "${BASH_SOURCE[0]}" != "$0" ]]; then
+    return 0 2>/dev/null
+fi
+_SHEMACS_LOADED=1
+
 #
 # Keybindings (mg/emacs compatible):
 #   C-x C-c    quit              C-x C-s    save

@@ -26,6 +26,12 @@ if [[ "${BASH_VERSINFO:-0}" -lt 4 ]]; then
     return 2>/dev/null || exit 1
 fi
 
+# Include guard: skip re-sourcing, but allow standalone execution
+if [[ -n "${_SHEMACS_SCM_LOADED:-}" && "${BASH_SOURCE[0]}" != "$0" ]]; then
+    return 0 2>/dev/null
+fi
+_SHEMACS_SCM_LOADED=1
+
 em() {
     local _em_script_dir
     _em_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || _em_script_dir=""
