@@ -1,14 +1,17 @@
 #!/usr/bin/expect -f
 # Test: Type text in Scheme editor, save to file, verify content, quit
-set timeout 300 ; # Scheme startup (bs loads ~1300 lines) is slow on CI
+set timeout 300 ; # A cold AOT cache build can be slow on CI
 
 set testfile "/tmp/em_scm_test_save_output.txt"
 file delete -force $testfile
 
-spawn bash [file join [file dirname [info script]] .. em.sh] $testfile
+set script_dir [file dirname [info script]]
+set repo_dir [file join $script_dir ..]
+source [file join $script_dir testlib.exp]
+spawn_shemacs $repo_dir $testfile
 
 expect {
-    "shemacs" { puts "\nPASS: editor started" }
+    -re {em: ?shemacs} { puts "\nPASS: editor started" }
     timeout { puts "\nFAIL: editor did not start"; exit 1 }
 }
 

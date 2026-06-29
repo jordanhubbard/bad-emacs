@@ -1,12 +1,16 @@
 #!/usr/bin/expect -f
 # Test: Cache round-trip — first run generates cache, second run uses it
-set timeout 300 ;# Scheme startup (bs loads ~1300 lines) is slow on CI
+set timeout 300 ;# A cold AOT cache build can be slow on CI
 
 set script_dir [file dirname [info script]]
 set repo_dir [file join $script_dir ..]
+source [file join $script_dir testlib.exp]
 
-# Determine cache location: em() prefers ~/.em.scm, falls back to repo/em.scm
-if {[file exists "$env(HOME)/.em.scm"]} {
+# Honor the hermetic paths supplied by run_tests.sh, then mirror launcher lookup.
+if {[info exists env(SHEMACS_CACHE_FILE)]} {
+    set cache_file $env(SHEMACS_CACHE_FILE)
+    set scm_file $env(SHEMACS_SCHEME_FILE)
+} elseif {[file exists "$env(HOME)/.em.scm"]} {
     set cache_file "$env(HOME)/.em.scm.cache"
     set scm_file "$env(HOME)/.em.scm"
 } else {
@@ -18,10 +22,10 @@ if {[file exists "$env(HOME)/.em.scm"]} {
 file delete -force $cache_file
 
 # --- First run: should generate cache ---
-spawn bash [file join $repo_dir em.sh]
+spawn_shemacs $repo_dir
 
 expect {
-    "shemacs" { puts "\nPASS: first run — editor started (no cache)" }
+    -re {em: ?shemacs} { puts "\nPASS: first run — editor started (no cache)" }
     timeout { puts "\nFAIL: first run — editor did not start"; exit 1 }
 }
 
@@ -43,23 +47,24 @@ puts "PASS: cache file exists after first run"
 
 # --- Second run: should use cache (fast) ---
 set timeout 60 ;# much shorter — cached start should be fast
-spawn bash [file join $repo_dir em.sh]
+spawn_shemacs $repo_dir
 
 expect {
-    "shemacs" { puts "PASS: second run — editor started (from cache)" }
+    -re {em: ?shemacs} { puts "PASS: second run — editor started (from cache)" }
     timeout { puts "FAIL: second run — editor did not start"; exit 1 }
 }
 
 set timeout 30
-# Type some text and verify it renders (no spaces — renderer elides blank chars)
-send "HelloFromCache"
+# Include spaces: generated output must preserve the renderer's blank cells.
+send "Hello From Cache"
 
 expect {
-    "HelloFromCache" { puts "PASS: second run — text rendered correctly" }
+    "Hello From Cache" { puts "PASS: second run — text and spaces rendered correctly" }
     timeout { puts "FAIL: second run — text not rendered"; exit 1 }
 }
 
-# C-x C-c to quit (modified buffer, answer 'n' to discard)
+# C-x C-c to quit. Scratch changes may exit directly; retain the prompt branch
+# for implementations that choose to confirm them.
 send "\x18\x03"
 
 expect {
@@ -77,10 +82,10 @@ expect {
 # --- Third run: invalidate cache by touching the source ---
 exec touch $scm_file
 set timeout 300 ;# full re-evaluation expected
-spawn bash [file join $repo_dir em.sh]
+spawn_shemacs $repo_dir
 
 expect {
-    "shemacs" { puts "PASS: third run — editor started (cache invalidated)" }
+    -re {em: ?shemacs} { puts "PASS: third run — editor started (cache invalidated)" }
     timeout { puts "FAIL: third run — editor did not start after invalidation"; exit 1 }
 }
 

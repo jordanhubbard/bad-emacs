@@ -1,6 +1,6 @@
 #!/usr/bin/expect -f
 # Test: Open a file in Scheme editor, verify content renders, quit
-set timeout 300 ; # Scheme startup (bs loads ~1300 lines) is slow on CI
+set timeout 300 ; # A cold AOT cache build can be slow on CI
 
 # Create test file
 set fd [open "/tmp/em_scm_test_input.txt" w]
@@ -9,7 +9,10 @@ puts $fd "Second Line"
 puts $fd "Third Line"
 close $fd
 
-spawn bash [file join [file dirname [info script]] .. em.sh] /tmp/em_scm_test_input.txt
+set script_dir [file dirname [info script]]
+set repo_dir [file join $script_dir ..]
+source [file join $script_dir testlib.exp]
+spawn_shemacs $repo_dir /tmp/em_scm_test_input.txt
 
 expect {
     "Hello" { puts "\nPASS: file content rendered" }

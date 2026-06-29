@@ -5,26 +5,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [1.1.1] - 2026-04-13
-
-### Added
-- retire native shell implementations; sheme is now the only backend
+### Changed
+- move shemacs-specific buffer and undo lowering out of sheme and into the
+  portable, injected `em.aot-runtime.sh`
+- make cache compilation isolated, syntax-checked, atomic, and sensitive to
+  source, runtime, and compiler freshness
+- run the same clean-cache integration workflows for Bash and zsh on Ubuntu
+  and macOS
+- make release retries idempotent and run tests before changelog mutation
 
 ### Fixed
-- use space-free patterns in expect tests
+- make the zsh launcher rebuild its cache through a child Bash, resolve its own
+  source directory correctly, and load `bs.zsh` for runtime evaluation
+- prefer checkout-adjacent editor sources over stale installed copies and
+  propagate editor failures after restoring launcher traps
+- preserve whitespace in compiled editor output and support dynamic string
+  offsets in generated zsh
+- preserve arbitrary non-NUL editor text in serialized undo, kill-ring, and
+  buffer state by using validated length-prefixed records
+- prompt before killing modified buffers and preserve them unless the user
+  answers exactly `yes`
+- replace stale CI references and test readiness patterns that could report
+  false positives
+- exercise the `eval-buffer` interpreter bridge under both generated targets
 
-
-## [1.1.1] - 2026-04-12
-
-### Added
-- retire native shell implementations; sheme is now the only backend
-
+## [1.1.1] - 2026-04-13
 
 ### Changed
 - Retire native bash (`em.sh`) and zsh (`em.zsh`) implementations; sheme is now a mandatory dependency
 - `em.sh` and `em.zsh` are now the Scheme AOT launchers (previously `em.scm.sh` / `em.scm.zsh`)
 - `em-scm()` function renamed to `em()` in zsh launcher; include guards updated
 - Tests and Makefile updated to reflect single Scheme implementation
+
+### Fixed
+- use space-free patterns in expect tests
 
 ## [1.1.0] - 2026-04-12
 
@@ -88,25 +102,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - correct bash regex patterns in changelog categorizer
 - correct ((PASS++)) arithmetic under set -e, skip expect when absent
+- make release changelog insertion awk-safe
 
 ### Other
 - Rename bad-emacs → shemacs
 - Address issue #2 feedback: dsusp, rect r/d, minibuffer display, help trim
 - Move Scheme editor into shemacs; add em.scm.sh launcher
 - Bring em.scm to feature parity with em.sh; update docs for 3 implementations
-
-
-## [1.0.1] - 2026-03-01
-
-### Fixed
-- correct bash regex patterns in changelog categorizer
-
-### Other
-- Rename bad-emacs → shemacs
-- Address issue #2 feedback: dsusp, rect r/d, minibuffer display, help trim
-- Move Scheme editor into shemacs; add em.scm.sh launcher
-- Bring em.scm to feature parity with em.sh; update docs for 3 implementations
-
 
 ## [1.0.0] - 2026-02-28
 

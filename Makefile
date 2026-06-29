@@ -14,26 +14,28 @@ help: ## Show available make targets
 
 # ── sheme bootstrap ──────────────────────────────────────────────────────────
 #
-# Installs ~/.bs.sh from the first available source:
+# Installs ~/.bs.sh and ~/.bs.zsh from the first available source:
 #   1. sibling sheme/ directory (dev layout)
-#   2. already-installed ~/.bs.sh (no-op)
-#   3. git clone from GitHub into a temp dir, copy bs.sh, remove temp dir
+#   2. already-installed ~/.bs.sh + ~/.bs.zsh pair (no-op)
+#   3. git clone from GitHub into a temp dir, copy both files, remove temp dir
 #
 define INSTALL_SHEME
-	@if [ -f "$(HOME)/.bs.sh" ]; then \
-		echo "  sheme: ~/.bs.sh already present — skipping"; \
-	elif [ -n "$(SHEME_DIR)" ] && [ -f "$(SHEME_DIR)/bs.sh" ]; then \
+	@if [ -n "$(SHEME_DIR)" ] && [ -f "$(SHEME_DIR)/bs.sh" ] && [ -f "$(SHEME_DIR)/bs.zsh" ]; then \
 		echo "  sheme: installing from sibling sheme/ directory..."; \
 		cp "$(SHEME_DIR)/bs.sh" "$(HOME)/.bs.sh"; \
-		echo "  sheme: installed ~/.bs.sh"; \
+		cp "$(SHEME_DIR)/bs.zsh" "$(HOME)/.bs.zsh"; \
+		echo "  sheme: installed ~/.bs.sh and ~/.bs.zsh"; \
+	elif [ -f "$(HOME)/.bs.sh" ] && [ -f "$(HOME)/.bs.zsh" ]; then \
+		echo "  sheme: ~/.bs.sh and ~/.bs.zsh already present — skipping"; \
 	elif command -v git >/dev/null 2>&1; then \
 		echo "  sheme: not found — cloning $(SHEME_REPO) ..."; \
 		_sheme_tmp=$$(mktemp -d /tmp/sheme_XXXXXX); \
 		git clone --quiet --depth 1 "$(SHEME_REPO)" "$$_sheme_tmp" \
 		    || { echo "ERROR: git clone failed"; rm -rf "$$_sheme_tmp"; exit 1; }; \
 		cp "$$_sheme_tmp/bs.sh" "$(HOME)/.bs.sh"; \
+		cp "$$_sheme_tmp/bs.zsh" "$(HOME)/.bs.zsh"; \
 		rm -rf "$$_sheme_tmp"; \
-		echo "  sheme: installed ~/.bs.sh"; \
+		echo "  sheme: installed ~/.bs.sh and ~/.bs.zsh"; \
 	else \
 		echo "ERROR: sheme is required but not installed, and git is not available."; \
 		echo "  Install sheme manually: $(SHEME_REPO)"; \
@@ -41,7 +43,7 @@ define INSTALL_SHEME
 	fi
 endef
 
-install-sheme: ## Install sheme (bs.sh) to home directory
+install-sheme: ## Install sheme interpreters/compiler to home directory
 	@echo "Installing sheme..."
 	$(INSTALL_SHEME)
 	@echo "Done."
@@ -53,11 +55,12 @@ install: ## Install shemacs (auto-installs sheme if needed)
 	$(INSTALL_SHEME)
 	@cp "$(SRCDIR)/em.sh"  "$(HOME)/.em.sh"
 	@cp "$(SRCDIR)/em.zsh" "$(HOME)/.em.zsh"
+	@cp "$(SRCDIR)/em.aot-runtime.sh" "$(HOME)/.em.aot-runtime.sh"
 	@if ! cmp -s "$(SRCDIR)/em.scm" "$(HOME)/.em.scm" 2>/dev/null; then \
 		cp "$(SRCDIR)/em.scm" "$(HOME)/.em.scm"; \
 		echo "  Updated ~/.em.scm"; \
 	fi
-	@echo "  Installed ~/.em.sh, ~/.em.zsh, ~/.em.scm"
+	@echo "  Installed ~/.em.sh, ~/.em.zsh, ~/.em.scm, ~/.em.aot-runtime.sh"
 	@if ! grep -q '\[.*\.em\.sh.*\] && source' "$(HOME)/.bashrc" 2>/dev/null; then \
 		if ! grep -q '# shemacs install marker' "$(HOME)/.bashrc" 2>/dev/null; then \
 			echo '' >> "$(HOME)/.bashrc"; \
@@ -82,7 +85,8 @@ install: ## Install shemacs (auto-installs sheme if needed)
 
 uninstall: ## Remove shemacs from home directory
 	@rm -f "$(HOME)/.em.sh" "$(HOME)/.em.zsh" "$(HOME)/.em.scm" \
-	       "$(HOME)/.em.scm.cache" "$(HOME)/.em.scm.zsh.cache"
+	       "$(HOME)/.em.aot-runtime.sh" "$(HOME)/.em.scm.cache" \
+	       "$(HOME)/.em.scm.zsh.cache"
 	@[ -f "$(HOME)/.bashrc" ] && sed -i '' \
 		'/# shemacs install marker/d; /# shemacs-scm install marker/d; /# em - bad emacs/d; /# em - shemacs/d; /source.*\.em\.sh/d; /sourceif.*\.em\.sh/d; /\[.*\.em\.sh.*\] && source/d; /source.*\.em\.scm\.sh/d; /sourceif.*\.em\.scm\.sh/d; /\[.*\.em\.scm\.sh.*\] && source/d' \
 		"$(HOME)/.bashrc" 2>/dev/null || \
@@ -102,20 +106,14 @@ check: ## Validate shell syntax without running tests
 	@bash -n em.sh && echo "  em.sh:   Syntax OK"
 	@echo "Checking zsh launcher..."
 	@zsh -n em.zsh && echo "  em.zsh:  Syntax OK"
+	@echo "Checking portable AOT runtime..."
+	@bash -n em.aot-runtime.sh && zsh -n em.aot-runtime.sh && echo "  em.aot-runtime.sh: Syntax OK"
 
-test: check ## Run full integration test suite (requires expect and sheme)
+test: check ## Run Bash and zsh AOT integration workflows
 	@./tests/run_tests.sh
 
-example: check ## Run smoke example (requires expect and sheme)
-	@if ! command -v expect >/dev/null 2>&1; then \
-		echo "expect is required for make example"; \
-		exit 1; \
-	fi
-	@echo ""
-	@echo "── Scheme editor smoke example (start and quit) ──"
-	@expect tests/test_scm_start_quit.exp
-	@echo ""
-	@echo "Done! Smoke example passed."
+example: check ## Run Bash and zsh AOT start/quit smoke examples
+	@bash tests/run_examples.sh
 
 release: ## Create a release: make release BUMP=patch|minor|major
 	@bash scripts/release.sh $(BUMP)

@@ -1,0 +1,39 @@
+#!/usr/bin/expect -f
+# Test: M-x eval-buffer crosses from generated code into the native interpreter.
+set timeout 300
+
+set script_dir [file dirname [info script]]
+set repo_dir [file join $script_dir ..]
+source [file join $script_dir testlib.exp]
+spawn_shemacs $repo_dir
+
+expect {
+    -re {em: ?shemacs} { puts "\nPASS: editor started" }
+    timeout { puts "\nFAIL: editor did not start"; exit 1 }
+}
+set timeout 60
+
+send "(+ 1 2)"
+sleep 1
+
+# M-x eval-buffer
+send "\x1b"
+sleep 0.2
+send "x"
+expect {
+    -re {M-x ?} { send "eval-buffer\r" }
+    timeout { puts "FAIL: M-x prompt not visible"; exit 1 }
+}
+
+expect {
+    -re {Eval: ?3} { puts "PASS: eval-buffer returned 3" }
+    timeout { puts "FAIL: eval-buffer result not visible"; exit 1 }
+}
+
+send "\x18\x03"
+expect {
+    eof { puts "PASS: editor exited cleanly" }
+    timeout { puts "FAIL: editor did not exit"; exit 1 }
+}
+
+puts "TEST PASSED: eval-buffer runtime bridge"

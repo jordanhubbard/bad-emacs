@@ -1,15 +1,44 @@
-# em
+# shemacs (`em`)
 
-shemacs — an Emacs/mg-compatible editor implemented as a single shell
-function. The editor logic is written in pure Scheme (`em.scm`) and
-AOT-compiled to native bash or zsh via [sheme](https://github.com/jordanhubbard/sheme).
+shemacs is an Emacs/mg-inspired terminal editor invoked as an `em` shell
+function. The editor logic is written once in Scheme (`em.scm`) and
+AOT-compiled to native Bash or zsh functions by
+[sheme](https://github.com/jordanhubbard/sheme).
 
 Features include multiple buffers, undo, a 60-entry kill ring, incremental
 search, query replace, keyboard macros, region highlighting, fill paragraph,
-and universal argument.
+rectangles, system-clipboard integration, indentation, and universal argument.
 
-**Requires [sheme](https://github.com/jordanhubbard/sheme)** (`bs.sh`) to be
-installed. Install sheme first, then install shemacs.
+The generated cache defines the editor's helper functions and state in the
+current shell; `em()` is the user-facing entry point. Standard terminal/file
+operations still invoke utilities such as `stty`, `tput`, `cat`, `mv`, and
+`stat`. sheme's interpreter is also loaded to provide `eval-string`, but the
+editor source itself is not interpreted after compilation.
+
+## Shell support
+
+The Scheme source is shell-neutral and both generated targets are supported:
+
+| Path | Current status |
+|---|---|
+| `em.sh` → Bash cache | Supported. Cold-cache compilation and interactive editor workflows are exercised by `make test`. |
+| `em.zsh` → zsh cache | Supported. The launcher invokes the compiler through a child Bash, then loads native zsh output and the zsh interpreter extensions. The same workflows run under zsh. |
+| `em.scm` | The sole editor-logic source for both targets. It is not a third runtime implementation. |
+| `em.aot-runtime.sh` | Portable Bash/zsh runtime for nested buffer and undo state that the generic compiler cannot flatten. |
+
+Both launchers can rebuild a missing or stale cache, preserve spaces in editor
+output, edit and save files, search, change case, confirm modified-buffer
+kills, and invalidate/rebuild the cache. Those paths are exercised from an
+isolated clean cache under both shells.
+
+## Requirements
+
+- Bash 4.3+ to host sheme's AOT compiler (`bs.sh`), including when the editor
+  itself runs under zsh
+- zsh 5+ to run zsh-targeted output
+- Standard terminal and file utilities (`stty`, `tput`, `cat`, `mktemp`,
+  `chmod`, `mv`, `rm`, and `stat`)
+- `expect` only for the integration tests
 
 ## Install
 
@@ -19,11 +48,16 @@ cd ~/em
 make install
 ```
 
-`make install` automatically fetches and installs
-[sheme](https://github.com/jordanhubbard/sheme) if it is not already
-present — no manual pre-install step required. It then copies `em.sh`,
-`em.zsh`, and `em.scm` to your home directory and adds `source` lines to
-both `~/.bashrc` and `~/.zshrc`.
+`make install` automatically copies a sibling sheme checkout or fetches sheme
+if the complete `~/.bs.sh` / `~/.bs.zsh` pair is absent. `bs.sh` hosts both AOT
+compiler targets; each launcher loads its native interpreter afterward for
+runtime evaluation. The target then copies `em.sh`, `em.zsh`, `em.scm`, and
+`em.aot-runtime.sh` to your home directory and adds source lines to both
+`~/.bashrc` and `~/.zshrc`.
+
+On macOS, `em.zsh` searches `PATH` and the usual Homebrew locations for a
+modern Bash instead of assuming `/bin/bash` is new enough. Set `SHEMACS_BASH`
+to an explicit Bash 4.3+ executable when it is installed elsewhere.
 
 Reload your shell and `em` is available:
 
@@ -33,18 +67,17 @@ em myfile.txt          # edit a file
 em                     # open a *scratch* buffer
 ```
 
-Because `em` is a shell function (not a subprocess), after the first-run
-compile it starts instantly — there is no fork/exec overhead.
+For zsh, source `~/.zshrc` instead.
 
 ### Makefile targets
 
 ```bash
 make install           # install shemacs (auto-installs sheme if needed)
-make install-sheme     # install sheme only (bs.sh → ~/.bs.sh)
+make install-sheme     # install both sheme interpreter files
 make uninstall         # remove copied files and source lines
-make check             # syntax-check the launchers
-make test              # run integration tests (requires expect and sheme)
-make example           # run smoke example (requires expect and sheme)
+make check             # syntax-check both launchers and portable runtime
+make test              # run clean-cache Bash and zsh editor workflows
+make example           # run Bash and zsh start/quit smoke tests
 ```
 
 ### Standalone (no sourcing)
@@ -54,16 +87,19 @@ The launcher also works as a plain executable:
 ```bash
 chmod +x em.sh
 ./em.sh myfile.txt
+
+zsh ./em.zsh myfile.txt
 ```
 
 ### First-run compile
 
-On first run, `em.sh` / `em.zsh` compile `em.scm` to a native shell cache
-(`em.scm.cache` for bash, `em.scm.zsh.cache` for zsh). This takes a moment.
-Subsequent runs source the cache directly and start instantly.
+On first run, each launcher compiles `em.scm` to a native shell cache
+(`em.scm.cache` for Bash, `em.scm.zsh.cache` for zsh). `bs.sh` is always run by
+Bash as the compiler host; `em.zsh` asks that child process to emit zsh.
+Subsequent runs source the cache directly.
 
-If the editor behaves unexpectedly after updating sheme or em.scm, delete
-the cache to force a rebuild:
+The cache is rebuilt when `em.scm`, `em.aot-runtime.sh`, or the selected
+compiler is newer. To force a rebuild manually:
 
 ```bash
 rm -f ~/.em.scm.cache ~/.em.scm.zsh.cache
@@ -71,12 +107,24 @@ rm -f ~/.em.scm.cache ~/.em.scm.zsh.cache
 
 ## Contributor Pre-Push Checks
 
-Before every push, run and pass these targets from both bash and zsh shells:
+Run these once from the repository root:
 
 ```bash
 make test
 make example
 ```
+
+This syntax-checks both launchers and the portable runtime, then runs the same
+start, open, save, edit, search, modified-buffer, and cache workflows against
+fresh Bash and zsh caches, including the compiled-to-interpreter `eval-buffer`
+bridge. It also checks runtime serialization and launcher precedence/error
+propagation. GitHub Actions runs the gate on Ubuntu and macOS.
+
+For performance work, `bash tests/bake-off.sh --quick` rebuilds both local AOT
+caches when their source, runtime, or compiler is newer, then compares startup,
+self-insert, and render costs; `mg` is an optional reference. The separate
+`tests/bench_render.sh` is a historical synthetic renderer comparison and does
+not exercise the current editor cache.
 
 ## Keybindings
 
@@ -84,7 +132,7 @@ make example
 | Key       | Action                    |
 |-----------|---------------------------|
 | C-x C-s   | Save buffer              |
-| C-x C-c   | Quit (prompts to save)   |
+| C-x C-c   | Quit (confirm unsaved buffers) |
 | C-x C-f   | Find (open) file         |
 | C-x C-w   | Write file (save as)     |
 | C-x i     | Insert file at point     |
@@ -93,7 +141,7 @@ make example
 | Key       | Action                    |
 |-----------|---------------------------|
 | C-x b     | Switch buffer            |
-| C-x k     | Kill buffer              |
+| C-x k     | Kill buffer (confirm if modified) |
 | C-x C-b   | List buffers             |
 
 ### Movement
@@ -122,7 +170,7 @@ make example
 | C-y        | Yank (paste)              |
 | C-w        | Kill region               |
 | M-w        | Copy region               |
-| C-SPC      | Set mark                  |
+| C-SPC / M-SPC | Set mark               |
 | C-x C-x    | Exchange point and mark   |
 | C-x h      | Mark whole buffer         |
 | C-t        | Transpose characters      |
@@ -132,6 +180,8 @@ make example
 | M-u        | Uppercase word            |
 | M-l        | Lowercase word            |
 | M-c        | Capitalize word           |
+| C-i / Tab  | Indent line/region by two spaces |
+| Shift-Tab  | Dedent line/region by two spaces |
 
 ### Undo
 | Key           | Action                 |
@@ -152,12 +202,24 @@ make example
 | C-x )     | Stop recording macro     |
 | C-x e     | Execute last macro       |
 
+### Rectangles
+
+| Key       | Action                    |
+|-----------|---------------------------|
+| C-x r k   | Kill rectangle            |
+| C-x r y   | Yank rectangle            |
+| C-x r r   | Copy rectangle            |
+| C-x r d   | Delete rectangle          |
+| C-x r t   | Replace rectangle with a string |
+| C-x r o   | Open rectangle            |
+
 ### Other
 | Key       | Action                    |
 |-----------|---------------------------|
 | C-u N     | Universal argument (repeat N times) |
 | C-q       | Quoted insert (literal control char) |
 | M-q       | Fill paragraph            |
+| C-z       | Suspend editor            |
 | C-g       | Cancel / keyboard quit    |
 | C-x =     | Show cursor position info |
 | C-h b     | Describe keybindings     |
@@ -168,15 +230,16 @@ make example
 `goto-line`, `what-line`, `query-replace`, `what-cursor-position`,
 `save-buffer`, `find-file`, `write-file`, `insert-file`, `kill-buffer`,
 `switch-to-buffer`, `list-buffers`, `set-fill-column`,
-`describe-bindings`, `save-buffers-kill-emacs`, `eval-buffer`
+`describe-bindings`, `help`, `save-buffers-kill-emacs`, `clipboard-yank`,
+`eval-buffer`
 
 ## Why?
 
 Because sometimes you just need a quick editor that feels like Emacs
-without installing Emacs.  shemacs is small (~1300 lines of Scheme),
-its dependencies are minimal (just sheme and a standard shell), and
-once compiled it starts instantly as a shell function with no fork/exec
-overhead.
+without installing Emacs. shemacs is about 2300 lines of Scheme, depends on
+sheme plus ordinary terminal/file utilities, and
+once compiled it runs as shell functions without spawning a separate editor
+process.
 
 ## The Totally True and Not At All Embellished History of shemacs
 

@@ -50,6 +50,25 @@ fi
 # ── Determine versions ───────────────────────────────────────────────
 LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
+# Resume a run that pushed its tag but was interrupted before publishing the
+# GitHub release. This avoids incorrectly advancing to another version.
+if [[ -n "$LAST_TAG" ]] && git tag --points-at HEAD | grep -Fxq "$LAST_TAG" && \
+   grep -Fq "## [${LAST_TAG#v}]" CHANGELOG.md && \
+   ! gh release view "$LAST_TAG" &>/dev/null; then
+    RESUME_VER="${LAST_TAG#v}"
+    RESUME_NOTES=$(awk -v heading="## [$RESUME_VER]" '
+        index($0, heading) == 1 { capture=1 }
+        capture && /^## \[/ && index($0, heading) != 1 { exit }
+        capture { print }
+    ' CHANGELOG.md)
+    echo "Resuming interrupted release $LAST_TAG..."
+    git push
+    git push origin "$LAST_TAG"
+    gh release create "$LAST_TAG" --verify-tag --title "$LAST_TAG" --notes "$RESUME_NOTES"
+    echo "Released $LAST_TAG"
+    exit 0
+fi
+
 if [[ -z "$LAST_TAG" ]]; then
     NEW_TAG="v1.0.0"
     NEW_VER="1.0.0"
@@ -98,8 +117,9 @@ re_skip='^[a-f0-9]+ (chore|docs|ci)'
 
 added=""; fixed=""; changed=""; other=""
 while IFS= read -r line; do
-    msg=$(echo "$line" | cut -d' ' -f2-)
-    clean=$(echo "$msg" | sed 's/^[^:]*: //')   # strip "type: " prefix
+    msg="${line#* }"
+    clean="$msg"
+    [[ "$clean" == *': '* ]] && clean="${clean#*: }"
     if   [[ "$line" =~ $re_feat ]];     then added+="- $clean"$'\n'
     elif [[ "$line" =~ $re_fix ]];      then fixed+="- $clean"$'\n'
     elif [[ "$line" =~ $re_refactor ]]; then changed+="- $clean"$'\n'
@@ -114,8 +134,28 @@ ENTRY="## [$NEW_VER] - $DATE"$'\n'
 [[ -n "$fixed"   ]] && ENTRY+=$'\n'"### Fixed"$'\n'"$fixed"
 [[ -n "$other"   ]] && ENTRY+=$'\n'"### Other"$'\n'"$other"
 
+# Validate before creating release artifacts so a failed test run is a clean,
+# idempotent no-op from the repository's perspective.
+echo ""
+echo "Running test suite..."
+if ! make test || ! make example; then
+    echo "" >&2
+    echo "Error: tests failed. Release aborted without modifying the repository." >&2
+    exit 1
+fi
+echo "  All tests passed"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "Error: working tree is dirty after tests. Aborting." >&2
+    git status --short >&2
+    exit 1
+fi
+
 # ── Update CHANGELOG.md ──────────────────────────────────────────────
-if [[ -f CHANGELOG.md ]]; then
+CHANGELOG_CHANGED=0
+if [[ -f CHANGELOG.md ]] && grep -Fq "## [$NEW_VER]" CHANGELOG.md; then
+    echo "  CHANGELOG.md already contains $NEW_VER; reusing it"
+elif [[ -f CHANGELOG.md ]]; then
     # Insert new entry after the ## [Unreleased] section header
     entry_tmp=$(mktemp "${TMPDIR:-/tmp}/shemacs-release-entry.XXXXXX")
     printf '%s\n' "$ENTRY" > "$entry_tmp"
@@ -131,32 +171,18 @@ if [[ -f CHANGELOG.md ]]; then
     ' CHANGELOG.md > CHANGELOG.md.tmp
     rm -f "$entry_tmp"
     mv CHANGELOG.md.tmp CHANGELOG.md
+    CHANGELOG_CHANGED=1
 else
     printf '# Changelog\n\nAll notable changes are documented here.\nFormat follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).\n\n## [Unreleased]\n\n%s\n' "$ENTRY" > CHANGELOG.md
+    CHANGELOG_CHANGED=1
 fi
-echo "  Updated CHANGELOG.md"
+(( CHANGELOG_CHANGED == 0 )) || echo "  Updated CHANGELOG.md"
 
 # ── Commit CHANGELOG ─────────────────────────────────────────────────
-git add CHANGELOG.md
-git commit -m "docs: update CHANGELOG for $NEW_TAG"
-echo "  Committed CHANGELOG"
-
-# ── Run tests ────────────────────────────────────────────────────────
-echo ""
-echo "Running test suite..."
-if ! make test; then
-    echo "" >&2
-    echo "Error: tests failed. Release aborted." >&2
-    echo "The CHANGELOG commit remains — fix tests and re-run make release." >&2
-    exit 1
-fi
-echo "  All tests passed"
-
-# ── Verify clean tree ────────────────────────────────────────────────
-if [[ -n "$(git status --porcelain)" ]]; then
-    echo "Error: working tree is dirty after tests. Aborting." >&2
-    git status --short >&2
-    exit 1
+if (( CHANGELOG_CHANGED )); then
+    git add CHANGELOG.md
+    git commit -m "docs: update CHANGELOG for $NEW_TAG"
+    echo "  Committed CHANGELOG"
 fi
 
 # ── Push, tag, and release ───────────────────────────────────────────

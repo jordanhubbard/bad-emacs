@@ -1,0 +1,13 @@
+# Shared launcher selection for expect-based editor tests.
+# The same workflow runs against both generated targets by setting EM_SHELL and
+# EM_LAUNCHER; defaults preserve convenient direct invocation of each test.
+proc spawn_shemacs {repo_dir args} {
+    global env spawn_id
+    set shell "bash"
+    set launcher "em.sh"
+    if {[info exists env(EM_SHELL)]} { set shell $env(EM_SHELL) }
+    if {[info exists env(EM_LAUNCHER)]} { set launcher $env(EM_LAUNCHER) }
+    set command [list $shell [file join $repo_dir $launcher]]
+    foreach arg $args { lappend command $arg }
+    eval spawn $command
+}

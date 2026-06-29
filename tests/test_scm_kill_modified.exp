@@ -1,0 +1,69 @@
+#!/usr/bin/expect -f
+# Test: killing a modified buffer requires an explicit "yes" confirmation.
+set timeout 300
+
+set script_dir [file dirname [info script]]
+set repo_dir [file join $script_dir ..]
+source [file join $script_dir testlib.exp]
+spawn_shemacs $repo_dir
+
+set tmpdir "/tmp"
+if {[info exists env(TMPDIR)] && $env(TMPDIR) ne ""} { set tmpdir $env(TMPDIR) }
+set modified_file [file join $tmpdir "shemacs-modified-[pid].txt"]
+file delete -force $modified_file
+
+expect {
+    -re {em: ?shemacs} { puts "\nPASS: editor started" }
+    timeout { puts "\nFAIL: editor did not start"; exit 1 }
+}
+set timeout 60
+
+# Create a second buffer through C-x C-f, then make it dirty.
+send "\x18\x06"
+expect {
+    -re {Find ?file:} { send "$modified_file\r" }
+    timeout { puts "FAIL: find-file prompt not visible"; exit 1 }
+}
+sleep 1
+send "dirty"
+sleep 1
+
+# First attempt: decline. The buffer must remain current.
+send "\x18k"
+expect {
+    -re {Kill ?buffer} { send "\r" }
+    timeout { puts "FAIL: kill-buffer prompt not visible"; exit 1 }
+}
+expect {
+    -re {modified.*kill ?anyway} { puts "PASS: modified-buffer confirmation appeared"; send "no\r" }
+    timeout { puts "FAIL: modified buffer was killed without confirmation"; exit 1 }
+}
+expect {
+    "Cancelled" { puts "PASS: declining preserved the buffer" }
+    timeout { puts "FAIL: decline was not honored"; exit 1 }
+}
+
+# Second attempt: confirm and return to scratch.
+send "\x18k"
+expect {
+    -re {Kill ?buffer} { send "\r" }
+    timeout { puts "FAIL: second kill-buffer prompt not visible"; exit 1 }
+}
+expect {
+    -re {modified.*kill ?anyway} { send "yes\r" }
+    timeout { puts "FAIL: second confirmation did not appear"; exit 1 }
+}
+expect {
+    -re {Killed ?buffer} { puts "PASS: confirmed kill completed" }
+    timeout { puts "FAIL: confirmed kill did not complete"; exit 1 }
+}
+
+send "\x18\x03"
+expect {
+    eof { puts "PASS: editor exited cleanly" }
+    timeout { puts "FAIL: editor did not exit"; exit 1 }
+}
+
+file delete -force $modified_file
+
+puts "TEST PASSED: modified-buffer kill confirmation"

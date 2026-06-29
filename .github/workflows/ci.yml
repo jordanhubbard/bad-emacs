@@ -6,173 +6,47 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  syntax-check:
-    name: Syntax Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install zsh
-        run: sudo apt-get update -qq && sudo apt-get install -y zsh
-
-      - name: Check bash version
-        run: bash --version | head -1
-
-      - name: Check zsh version
-        run: zsh --version
-
-      - name: Syntax check bash version
-        run: bash -n em.sh
-
-      - name: Syntax check zsh version
-        run: zsh -n em.zsh
-
-  test-bash:
-    name: Bash Integration Tests
-    runs-on: ubuntu-latest
-    needs: syntax-check
-    timeout-minutes: 15
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install expect
-        run: sudo apt-get update && sudo apt-get install -y expect
-
-      - name: Check bash version
-        run: bash --version | head -1
-
-      - name: "Test: start and quit"
-        run: expect tests/test_bash_start_quit.exp
-
-      - name: "Test: open file"
-        run: expect tests/test_bash_open_file.exp
-
-      - name: "Test: save file"
-        run: expect tests/test_bash_save_file.exp
-
-      - name: "Test: upcase word (M-u)"
-        run: expect tests/test_bash_upcase.exp
-
-      - name: "Test: isearch highlight"
-        run: expect tests/test_bash_isearch.exp
-
-      - name: "Test: tab completion"
-        run: expect tests/test_bash_tab_complete.exp
-
-      - name: "Test: rectangle kill/yank"
-        run: expect tests/test_bash_rectangle.exp
-
-  test-zsh:
-    name: Zsh Integration Tests
-    runs-on: ubuntu-latest
-    needs: syntax-check
-    timeout-minutes: 15
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install expect and zsh
-        run: sudo apt-get update && sudo apt-get install -y expect zsh
-
-      - name: Check zsh version
-        run: zsh --version
-
-      - name: "Test: start and quit"
-        run: expect tests/test_zsh_start_quit.exp
-
-      - name: "Test: open file"
-        run: expect tests/test_zsh_open_file.exp
-
-      - name: "Test: save file"
-        run: expect tests/test_zsh_save_file.exp
-
-      - name: "Test: upcase word (M-u)"
-        run: expect tests/test_zsh_upcase.exp
-
-      - name: "Test: isearch highlight"
-        run: expect tests/test_zsh_isearch.exp
-
-      - name: "Test: tab completion"
-        run: expect tests/test_zsh_tab_complete.exp
-
-      - name: "Test: rectangle kill/yank"
-        run: expect tests/test_zsh_rectangle.exp
-
-  test-scm:
-    name: Scheme Editor Tests
-    runs-on: ubuntu-latest
-    needs: syntax-check
+  integration:
+    name: Bash and zsh integration (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    permissions:
-      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out shemacs
+        uses: actions/checkout@v4
+        with:
+          path: shemacs
 
-      - name: Install expect
-        run: sudo apt-get update && sudo apt-get install -y expect
+      - name: Check out sheme
+        uses: actions/checkout@v4
+        with:
+          repository: jordanhubbard/sheme
+          path: sheme
 
-      - name: Install sheme
+      - name: Install Linux test dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y expect zsh
+
+      - name: Install current Bash on macOS
+        if: runner.os == 'macOS'
         run: |
-          git clone --depth 1 https://github.com/jordanhubbard/sheme.git ~/sheme
-          cd ~/sheme && make install
+          brew install bash
+          echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
 
-      - name: Check sheme version
-        run: source ~/.bs.sh && bs-eval '"sheme ready"'
+      - name: Show shell versions
+        run: |
+          bash --version | head -1
+          zsh --version
+          expect -v
 
-      - name: "Test: start and quit"
-        run: expect tests/test_scm_start_quit.exp
-
-      - name: "Test: open file"
-        run: expect tests/test_scm_open_file.exp
-
-      - name: "Test: save file"
-        run: expect tests/test_scm_save_file.exp
-
-      - name: "Test: upcase word (M-u)"
-        run: expect tests/test_scm_upcase.exp
-
-      - name: "Test: isearch highlight"
-        run: expect tests/test_scm_isearch.exp
-
-  test-macos:
-    name: macOS Smoke Test
-    runs-on: macos-latest
-    needs: syntax-check
-    timeout-minutes: 15
-    permissions:
-      contents: read
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install bash 5 via Homebrew
-        run: brew install bash
-
-      - name: Add Homebrew bash to PATH
-        run: echo "$(brew --prefix)/bin" >> $GITHUB_PATH
-
-      - name: Check bash version
-        run: bash --version | head -1
-
-      - name: Check zsh version
-        run: zsh --version
-
-      - name: Syntax check both versions
-        run: make check
-
-      - name: "Bash: start and quit"
-        run: expect tests/test_bash_start_quit.exp
-
-      - name: "Zsh: start and quit"
-        run: expect tests/test_zsh_start_quit.exp
+      - name: Run both generated editor targets
+        working-directory: shemacs
+        run: make test

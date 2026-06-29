@@ -1,11 +1,14 @@
 #!/usr/bin/expect -f
 # Test: Type text in Scheme editor, upcase word with M-u, quit
-set timeout 300 ; # Scheme startup (bs loads ~1300 lines) is slow on CI
+set timeout 300 ; # A cold AOT cache build can be slow on CI
 
-spawn bash [file join [file dirname [info script]] .. em.sh]
+set script_dir [file dirname [info script]]
+set repo_dir [file join $script_dir ..]
+source [file join $script_dir testlib.exp]
+spawn_shemacs $repo_dir
 
 expect {
-    "shemacs" { puts "\nPASS: editor started" }
+    -re {em: ?shemacs} { puts "\nPASS: editor started" }
     timeout { puts "\nFAIL: editor did not start"; exit 1 }
 }
 
@@ -30,7 +33,7 @@ expect {
     timeout { puts "FAIL: upcase not visible"; exit 1 }
 }
 
-# C-x C-c to quit (buffer is modified, decline save)
+# C-x C-c to quit (modified scratch buffers do not require confirmation)
 send "\x18\x03"
 sleep 1
 

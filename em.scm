@@ -1,4 +1,4 @@
-;; em.scm - shemacs: Emacs-like editor in Scheme (runs on sheme/bs.sh)
+;; em.scm - shemacs: shell-neutral editor source, AOT-compiled by sheme
 ;;
 ;; FILE / BUFFER                        EDITING
 ;; C-x C-c   Quit                       C-d / DEL   Delete char forward
@@ -57,6 +57,7 @@
 (define em-bufname "*scratch*")
 (define em-message "")
 (define em-msg-persist 0)
+(define em-pending-kill-buffer "")
 (define em-last-cmd "")
 (define em-goal-col -1)
 (define em-kill-ring '())
@@ -213,6 +214,8 @@
 ;;   ("replace_region" sy n-cur scy scx orig-lines-list)
 ;;                                        – undo: remove n-cur lines at sy,
 ;;                                               insert orig-lines-list back
+;; AOT note: em.aot-runtime.sh supplies shell-native versions of this subsystem.
+;; Keep record fields, limits, cursor effects, and messages aligned there.
 (define (em-undo-push record)
   (set! em-undo-stack (cons record em-undo-stack))
   (when (> (length em-undo-stack) 200)
@@ -1234,6 +1237,14 @@
           (if (equal? result "yes")
               (set! em-running #f)
               (set! em-message "Cancelled")))
+         ((equal? callback "kill-buffer-confirm")
+          (if (equal? result "yes")
+              (begin
+                (em-do-kill-buffer em-pending-kill-buffer 1)
+                (set! em-pending-kill-buffer ""))
+              (begin
+                (set! em-pending-kill-buffer "")
+                (set! em-message "Cancelled"))))
          ((equal? callback "find-file")
           (when (not (equal? result ""))
             (em-do-find-file result)))
@@ -1249,7 +1260,7 @@
          ((equal? callback "switch-buffer")
           (em-do-switch-buffer result))
          ((equal? callback "kill-buffer")
-          (em-do-kill-buffer result))
+          (em-do-kill-buffer result 0))
          ((equal? callback "goto-line")
           (let ((n (string->number result)))
             (if (and n (> n 0))
@@ -1649,6 +1660,8 @@
 ;;  0=id  1=name  2=filename  3=lines  4=nlines
 ;;  5=cy  6=cx  7=top  8=left  9=modified
 ;;  10=mark-y  11=mark-x  12=goal-col  13=undo-stack  14=kill-ring
+;; AOT note: em.aot-runtime.sh stores the same logical fields in associative
+;; arrays because generated shell arrays cannot contain nested vectors.
 
 (define (em-make-buffer id name filename)
   (let ((buf (make-vector 15 #f)))
@@ -1746,7 +1759,7 @@
             (em-restore-buffer-state buf)
             (set! em-message em-bufname))))))
 
-(define (em-do-kill-buffer target)
+(define (em-do-kill-buffer target force)
   (let ((target (if (equal? target "") em-bufname target)))
     (if (= (length em-buffers) 1)
         (set! em-message "Cannot kill the only buffer")
@@ -1756,14 +1769,23 @@
               (let* ((is-cur (= (vector-ref buf 0) em-cur-buf-id))
                      (is-mod (if is-cur em-modified (vector-ref buf 9)))
                      (bname (vector-ref buf 1)))
-                (if (and (= is-mod 1) (not (equal? bname "*scratch*")))
+                (if (and (= force 0) (= is-mod 1)
+                         (not (equal? bname "*scratch*")))
                     (begin
-                      ;; TODO: prompt for confirmation - for now just kill
-                      #f))
-                (set! em-buffers (filter (lambda (b) (not (= (vector-ref b 0) (vector-ref buf 0)))) em-buffers))
-                (when is-cur
-                  (em-restore-buffer-state (car em-buffers)))
-                (set! em-message (string-append "Killed buffer '" target "'"))))))))
+                      (set! em-pending-kill-buffer target)
+                      (em-minibuffer-start
+                        (string-append "Buffer '" target
+                                       "' modified; kill anyway? (yes or no) ")
+                        "kill-buffer-confirm"))
+                    (begin
+                      (set! em-buffers
+                        (filter (lambda (b)
+                                  (not (= (vector-ref b 0) (vector-ref buf 0))))
+                                em-buffers))
+                      (when is-cur
+                        (em-restore-buffer-state (car em-buffers)))
+                      (set! em-message
+                        (string-append "Killed buffer '" target "'"))))))))))
 
 (define (em-list-buffers)
   (let ((saved-lines em-lines) (saved-nlines em-nlines)

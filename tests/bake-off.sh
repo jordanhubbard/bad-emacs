@@ -23,7 +23,7 @@
 #   bash tests/bake-off.sh            # full bake-off (3 trials each)
 #   bash tests/bake-off.sh --quick    # 1 trial
 #
-# Requires: expect, bash 4+, zsh 5+, mg (brew install mg)
+# Requires: expect, Bash 4+, zsh 5+, sheme, Python 3, and optionally mg
 
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -127,15 +127,16 @@ ANSI_PAT='.'
 
 declare -A V_LABEL V_SPAWN V_SHELL V_CACHE V_PAT
 
+MG_BIN=$(command -v mg 2>/dev/null || true)
 V_LABEL[mg_ref]="mg                    (C binary)"
-V_SPAWN[mg_ref]="/opt/homebrew/bin/mg"
+V_SPAWN[mg_ref]="${MG_BIN:-mg}"
 V_SHELL[mg_ref]="none"
 V_CACHE[mg_ref]=""
 V_PAT[mg_ref]="$ANSI_PAT"
 
 V_LABEL[bash_aot]="em.sh              AOT bash (sheme)"
-# Source local cache directly — bypasses em.sh's HOME-based cache lookup
-# so the benchmark always tests the cache in this project directory.
+# Source a local cache directly so startup measurements exclude discovery and
+# compilation. The preflight below builds or refreshes this exact cache.
 # Tcl {}-quoting passes the -c argument as a single word to bash.
 V_SPAWN[bash_aot]="bash --norc --noprofile -c {source ./em.scm.cache; em_main}"
 V_SHELL[bash_aot]="bash"
@@ -143,9 +144,7 @@ V_CACHE[bash_aot]="em.scm.cache"
 V_PAT[bash_aot]="$ANSI_PAT"
 
 V_LABEL[zsh_aot]="em.zsh             AOT zsh  (sheme)"
-# Source local cache directly — em.zsh uses ~/.em.scm path which resolves
-# the cache to ~/.em.scm.zsh.cache (may not exist).  Tcl {}-quoting passes
-# the -c argument as a single word to zsh.
+# Tcl {}-quoting passes the -c argument as a single word to zsh.
 V_SPAWN[zsh_aot]="zsh -f -c {source ./em.scm.zsh.cache; em_main}"
 V_SHELL[zsh_aot]="zsh"
 V_CACHE[zsh_aot]="em.scm.zsh.cache"
@@ -167,6 +166,45 @@ fi
 if ! command -v python3 &>/dev/null; then
     echo "ERROR: python3 is required for timing" >&2; exit 1
 fi
+
+# Build both benchmark inputs from the checked-out source. Reusing an old cache
+# can otherwise compare different editor/compiler versions while looking valid.
+SHEME_BS=${SHEME_BS:-}
+for candidate in "$(pwd)/../sheme/bs.sh" "$HOME/.bs.sh"; do
+    [[ -n "$SHEME_BS" ]] && break
+    [[ -f "$candidate" ]] && SHEME_BS="$candidate"
+done
+if [[ ! -f "$SHEME_BS" ]]; then
+    echo "ERROR: sheme bs.sh not found (set SHEME_BS or use sibling checkouts)" >&2
+    exit 1
+fi
+
+_build_cache() {
+    local target="$1" output="$2" checker="$3" tmp
+    if [[ -f "$output" && "$output" -nt em.scm \
+          && "$output" -nt em.aot-runtime.sh && "$output" -nt "$SHEME_BS" ]]; then
+        return
+    fi
+    printf '  BUILD %-36s' "$output"
+    tmp=$(umask 077; mktemp "${output}.tmp.XXXXXXXX")
+    if bash -c '
+            source "$1" || exit
+            bs-reset
+            "$2" --runtime "$3" "$(< "$4")"
+        ' _ "$SHEME_BS" "$target" "$(pwd)/em.aot-runtime.sh" "$(pwd)/em.scm" \
+            > "$tmp" \
+       && "$checker" -n "$tmp" \
+       && mv -f "$tmp" "$output"; then
+        echo " OK"
+    else
+        rm -f "$tmp"
+        echo " FAIL"
+        exit 1
+    fi
+}
+
+_build_cache bs-compile em.scm.cache bash
+_build_cache bs-compile-zsh em.scm.zsh.cache zsh
 
 echo "Checking variants..."
 for v in "${VARIANTS[@]}"; do

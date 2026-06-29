@@ -1,9 +1,9 @@
 #!/bin/bash
-# bench_render.sh — render-loop performance benchmark for em.sh / em.zsh
+# bench_render.sh — historical synthetic render-loop microbenchmark
 #
-# Measures µs-per-render for the hottest path in the editor:
-#   _em_render() is called on every keystroke, so even small per-call
-#   savings compound significantly during editing sessions.
+# This models helpers from the retired native-shell implementations. It does
+# not source the current AOT cache or benchmark em_render, so it is useful as a
+# historical experiment rather than as a regression test for current shemacs.
 #
 # Optimisations being validated:
 #   1. Pre-computed _em_spaces / _em_dashes strings eliminate per-line
@@ -57,11 +57,8 @@ visible_rows=$((_em_rows - 2))
 NUM_RENDERS=2000   # renders per measurement
 
 # ── baseline helpers ─────────────────────────────────────────────────────────
-# Note: the baseline and optimised helpers below deliberately duplicate the
-# before/after logic from em.sh _em_render() so that the benchmark measures
-# the two implementations head-to-head in a single process.  They are kept
-# in sync with the source manually; if the rendering logic changes, update
-# these accordingly so the benchmark remains meaningful.
+# The baseline and optimised helpers below deliberately preserve the old
+# before/after logic. They are not expected to track current em.scm behavior.
 _em_expand_tabs_baseline() {
     local line="$1"
     if [[ "$line" != *$'\t'* ]]; then _em_expanded_line="$line"; return; fi
